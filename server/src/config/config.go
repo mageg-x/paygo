@@ -1,6 +1,7 @@
 package config
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"path/filepath"
@@ -89,5 +90,44 @@ func InitDB() {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 
+	// 设置自增ID从10000开始
+	setAutoIncrementStart(sqlDB)
+
+	// 从数据库加载管理员配置
+	loadAdminConfig()
+
 	log.Println("数据库初始化成功")
+}
+
+func loadAdminConfig() {
+	var cfg model.Config
+	
+	// 加载管理员用户名
+	cfg = model.Config{}
+	DB.Where("k = ?", "admin_user").Limit(1).Find(&cfg)
+	if cfg.V != "" {
+		AppConfig.AdminUser = cfg.V
+	}
+	
+	// 加载管理员密码
+	cfg = model.Config{}
+	DB.Where("k = ?", "admin_pwd").Limit(1).Find(&cfg)
+	if cfg.V != "" {
+		AppConfig.AdminPwd = cfg.V
+	}
+	
+	// 加载系统密钥
+	cfg = model.Config{}
+	DB.Where("k = ?", "sys_key").Limit(1).Find(&cfg)
+	if cfg.V != "" {
+		AppConfig.SysKey = cfg.V
+	}
+}
+
+// 设置自增ID从10000开始
+func setAutoIncrementStart(db *sql.DB) {
+	tables := []string{"user", "user_group", "record", "log", "order", "refundorder", "settle", "batch", "transfer", "pay_type", "plugin", "channel", "roll", "sub_channel", "config", "cache", "anounce", "reg_code", "invite_code", "risk", "domain", "blacklist", "ps_receiver", "ps_receiver2", "ps_order", "weixin"}
+	for _, table := range tables {
+		db.Exec("INSERT INTO sqlite_sequence (name, seq) VALUES (?, 9999) ON CONFLICT(name) DO UPDATE SET seq = 9999", table)
+	}
 }

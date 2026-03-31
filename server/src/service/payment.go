@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"paygo/src/config"
 	"paygo/src/model"
 	"paygo/src/plugin"
+
+	"github.com/gin-gonic/gin"
 )
 
 type PaymentService struct {
@@ -26,18 +29,18 @@ func NewPaymentService() *PaymentService {
 
 // 支付参数
 type SubmitParams struct {
-	UID       uint
+	UID        uint
 	OutTradeNo string
-	Type      int    // 支付类型ID
-	ChannelID int    // 通道ID（submit2指定通道）
-	Name      string
-	Money     float64
-	NotifyURL string
-	ReturnURL string
-	Param     string
-	IP        string
-	Device    string // pc/mobile
-	Method    string // web/jump/jsapi/scan
+	Type       int // 支付类型ID
+	ChannelID  int // 通道ID（submit2指定通道）
+	Name       string
+	Money      float64
+	NotifyURL  string
+	ReturnURL  string
+	Param      string
+	IP         string
+	Device     string // pc/mobile
+	Method     string // web/jump/jsapi/scan
 }
 
 // 获取可用支付方式
@@ -45,6 +48,7 @@ func (s *PaymentService) GetAvailableTypes(uid uint) ([]model.PayType, error) {
 	// 获取商户的用户组
 	user, err := s.authSvc.GetUser(uid)
 	if err != nil {
+		log.Printf("[get_available_types_failed] uid=%d, reason=get user failed, error=%s", uid, err.Error())
 		return nil, err
 	}
 
@@ -79,6 +83,7 @@ func (s *PaymentService) GetAvailableTypes(uid uint) ([]model.PayType, error) {
 func (s *PaymentService) GetAvailableChannels(uid uint, typeID int) ([]model.Channel, error) {
 	user, err := s.authSvc.GetUser(uid)
 	if err != nil {
+		log.Printf("[get_available_channels_failed] uid=%d, type_id=%d, reason=get user failed, error=%s", uid, typeID, err.Error())
 		return nil, err
 	}
 
@@ -115,6 +120,7 @@ func (s *PaymentService) SelectChannel(uid uint, typeID int, channelID int) (*mo
 		var channel model.Channel
 		result := config.DB.Where("id = ? AND type = ? AND status = 1", channelID, typeID).First(&channel)
 		if result.Error != nil {
+			log.Printf("[select_channel_failed] uid=%d, type_id=%d, channel_id=%d, reason=specified channel not found or disabled", uid, typeID, channelID)
 			return nil, errors.New("指定通道不存在或已关闭")
 		}
 		return &channel, nil
@@ -128,6 +134,7 @@ func (s *PaymentService) SelectChannel(uid uint, typeID int, channelID int) (*mo
 		var channel model.Channel
 		r := config.DB.Where("type = ? AND status = 1", typeID).First(&channel)
 		if r.Error != nil {
+			log.Printf("[select_channel_failed] uid=%d, type_id=%d, reason=no available channel")
 			return nil, errors.New("没有可用的支付通道")
 		}
 		return &channel, nil
@@ -141,6 +148,7 @@ func (s *PaymentService) SelectChannel(uid uint, typeID int, channelID int) (*mo
 	json.Unmarshal([]byte(roll.Info), &rollInfo)
 
 	if len(rollInfo.Channels) == 0 {
+		log.Printf("[select_channel_failed] type_id=%d, reason=roll config empty")
 		return nil, errors.New("轮询配置错误")
 	}
 
@@ -170,6 +178,7 @@ func (s *PaymentService) SelectChannel(uid uint, typeID int, channelID int) (*mo
 
 	var channel model.Channel
 	if config.DB.First(&channel, channelID).Error != nil {
+		log.Printf("[select_channel_failed] type_id=%d, channel_id=%d, reason=channel not found")
 		return nil, errors.New("通道不存在")
 	}
 
@@ -181,20 +190,33 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 	// 获取商户
 	user, err := s.authSvc.GetUser(params.UID)
 	if err != nil {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, reason=merchant not found, error=%s", params.UID, params.OutTradeNo, err.Error())
 		return nil, errors.New("商户不存在")
 	}
 
 	if user.Status != 0 {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, reason=merchant disabled, status=%d", params.UID, params.OutTradeNo, user.Status)
 		return nil, errors.New("商户已被禁用")
 	}
 
 	if user.Pay != 1 {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, reason=merchant no pay permission")
 		return nil, errors.New("商户没有支付权限")
+	}
+
+	// 执行风控检查
+	riskSvc := NewRiskService()
+	domain := strings.Split(params.Param, "|")[0]
+	riskResult := riskSvc.CheckPaymentRisk(params.UID, params.IP, params.Name, params.Money)
+	if !riskResult.Passed {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, ip=%s, risk_code=%d, reason=%s", params.UID, params.OutTradeNo, params.IP, riskResult.Code, riskResult.Msg)
+		return nil, errors.New(riskResult.Msg)
 	}
 
 	// 选择通道
 	channel, err := s.SelectChannel(params.UID, params.Type, params.ChannelID)
 	if err != nil {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, reason=select channel failed, error=%s", params.UID, params.OutTradeNo, err.Error())
 		return nil, err
 	}
 
@@ -202,23 +224,22 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 	if channel.Paymin != "" {
 		minMoney, _ := strconv.ParseFloat(channel.Paymin, 10)
 		if params.Money < minMoney {
+			log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, money=%.2f, min_money=%s, reason=below minimum", params.UID, params.OutTradeNo, params.Money, channel.Paymin)
 			return nil, errors.New("最低支付金额" + channel.Paymin)
 		}
 	}
 	if channel.Paymax != "" {
 		maxMoney, _ := strconv.ParseFloat(channel.Paymax, 10)
 		if params.Money > maxMoney {
+			log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, money=%.2f, max_money=%s, reason=exceeds maximum", params.UID, params.OutTradeNo, params.Money, channel.Paymax)
 			return nil, errors.New("最高支付金额" + channel.Paymax)
 		}
 	}
 
 	// 检查域名授权
-	domain := strings.Split(params.Param, "|")[0]
 	if domain != "" && !s.orderSvc.CheckDomainAuth(params.UID, domain) {
-		// 检查是否在禁止名单中
-		if s.orderSvc.IsBlacklisted(params.IP) {
-			return nil, errors.New("IP禁止访问")
-		}
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, domain=%s, reason=domain not authorized")
+		return nil, errors.New("域名未授权")
 	}
 
 	// 计算费率
@@ -263,6 +284,7 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 	}
 
 	if err := config.DB.Create(order).Error; err != nil {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, reason=create order failed, error=%s", params.UID, params.OutTradeNo, err.Error())
 		return nil, errors.New("创建订单失败")
 	}
 
@@ -270,27 +292,29 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 	pluginName := channel.Plugin
 	pluginHandler := plugin.GetHandler(pluginName)
 	if pluginHandler == nil {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, plugin=%s, reason=plugin not found")
 		return nil, errors.New("支付通道插件不存在")
 	}
 
 	// 构造插件参数
 	pluginParams := map[string]interface{}{
-		"trade_no":   tradeNo,
+		"trade_no":     tradeNo,
 		"out_trade_no": params.OutTradeNo,
-		"money":       params.Money,
-		"name":        params.Name,
-		"notify_url":  params.NotifyURL,
-		"return_url":  params.ReturnURL,
-		"param":       params.Param,
-		"ip":          params.IP,
-		"device":      params.Device,
-		"method":      params.Method,
-		"channel":     channel,
+		"money":        params.Money,
+		"name":         params.Name,
+		"notify_url":   params.NotifyURL,
+		"return_url":   params.ReturnURL,
+		"param":        params.Param,
+		"ip":           params.IP,
+		"device":       params.Device,
+		"method":       params.Method,
+		"channel":      channel,
 	}
 
 	// 调用插件提交
 	result, err := pluginHandler.Submit(pluginParams)
 	if err != nil {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, plugin=%s, reason=plugin submit failed, error=%s", params.UID, params.OutTradeNo, pluginName, err.Error())
 		return nil, err
 	}
 
@@ -326,15 +350,17 @@ func (s *PaymentService) SubmitH5Payment(params SubmitParams) (map[string]interf
 }
 
 // 支付回调处理
-func (s *PaymentService) HandleNotify(tradeNo string, pluginName string) (map[string]interface{}, error) {
+func (s *PaymentService) HandleNotify(tradeNo string, pluginName string, c *gin.Context) (map[string]interface{}, error) {
 	pluginHandler := plugin.GetHandler(pluginName)
 	if pluginHandler == nil {
+		log.Printf("[handle_notify_failed] trade_no=%s, plugin=%s, reason=plugin not found", tradeNo, pluginName)
 		return nil, errors.New("插件不存在")
 	}
 
 	// 调用插件处理回调
-	result, err := pluginHandler.Notify(tradeNo)
+	result, err := pluginHandler.Notify(tradeNo, c)
 	if err != nil {
+		log.Printf("[handle_notify_failed] trade_no=%s, plugin=%s, reason=plugin notify failed, error=%s", tradeNo, pluginName, err.Error())
 		return nil, err
 	}
 
@@ -342,6 +368,7 @@ func (s *PaymentService) HandleNotify(tradeNo string, pluginName string) (map[st
 		// 更新订单状态
 		err = s.orderSvc.OrderPaid(result.TradeNo, result.APITradeNo, result.Buyer)
 		if err != nil {
+			log.Printf("[handle_notify_failed] trade_no=%s, plugin=%s, reason=order paid update failed, error=%s", tradeNo, pluginName, err.Error())
 			return nil, err
 		}
 	}
@@ -353,30 +380,34 @@ func (s *PaymentService) HandleNotify(tradeNo string, pluginName string) (map[st
 }
 
 // 同步回调处理
-func (s *PaymentService) HandleReturn(tradeNo string, pluginName string) (plugin.ReturnResult, error) {
+func (s *PaymentService) HandleReturn(tradeNo string, pluginName string, c *gin.Context) (plugin.ReturnResult, error) {
 	pluginHandler := plugin.GetHandler(pluginName)
 	if pluginHandler == nil {
+		log.Printf("[handle_return_failed] trade_no=%s, plugin=%s, reason=plugin not found", tradeNo, pluginName)
 		return plugin.ReturnResult{}, errors.New("插件不存在")
 	}
 
-	return pluginHandler.Return(tradeNo)
+	return pluginHandler.Return(tradeNo, c)
 }
 
 // 退款
 func (s *PaymentService) Refund(tradeNo string, money float64) error {
 	order, err := s.orderSvc.GetOrder(tradeNo)
 	if err != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=get order failed, error=%s", tradeNo, money, err.Error())
 		return err
 	}
 
 	// 获取通道的插件名称
 	var channel model.Channel
 	if config.DB.First(&channel, order.Channel).Error != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=channel not found")
 		return errors.New("通道不存在")
 	}
 
 	pluginHandler := plugin.GetHandler(channel.Plugin)
 	if pluginHandler == nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, plugin=%s, reason=plugin not found", tradeNo, money, channel.Plugin)
 		return errors.New("插件不存在")
 	}
 
@@ -384,6 +415,9 @@ func (s *PaymentService) Refund(tradeNo string, money float64) error {
 		"trade_no": tradeNo,
 		"money":    money,
 	})
+	if err != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, plugin=%s, reason=plugin refund failed, error=%s", tradeNo, money, channel.Plugin, err.Error())
+	}
 	return err
 }
 
@@ -392,6 +426,7 @@ func (s *PaymentService) GetChannelConfig(channelID int) (*model.Channel, error)
 	var channel model.Channel
 	result := config.DB.First(&channel, channelID)
 	if result.Error != nil {
+		log.Printf("[get_channel_config_failed] channel_id=%d, reason=channel not found, error=%s", channelID, result.Error.Error())
 		return nil, errors.New("通道不存在")
 	}
 	return &channel, nil

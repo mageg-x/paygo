@@ -1,6 +1,7 @@
 package user
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -36,26 +37,36 @@ func (h *UserHandler) LoginPage(c *gin.Context) {
 
 // 登录
 func (h *UserHandler) Login(c *gin.Context) {
-	loginType := c.PostForm("type") // password / key
-	var err error
-	var token string
-	var user *model.User
-
-	if loginType == "key" {
-		uid, _ := strconv.Atoi(c.PostForm("uid"))
-		key := c.PostForm("key")
-		user, token, err = h.authSvc.UserKeyLogin(uint(uid), key)
-	} else {
-		uid, _ := strconv.Atoi(c.PostForm("uid"))
-		pwd := c.PostForm("password")
-		user, token, err = h.authSvc.UserLogin(uint(uid), pwd)
+	var req struct {
+		Type     string `json:"type"`
+		UID      int    `json:"uid"`
+		Key      string `json:"key"`
+		Password string `json:"password"`
 	}
 
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
 
+	var err error
+	var token string
+	var user *model.User
+	ip := c.ClientIP()
+
+	if req.Type == "key" {
+		user, token, err = h.authSvc.UserKeyLogin(uint(req.UID), req.Key)
+	} else {
+		user, token, err = h.authSvc.UserLogin(uint(req.UID), req.Password)
+	}
+
+	if err != nil {
+		log.Printf("[商户登录失败] IP: %s, UID: %d, 错误: %s", ip, req.UID, err.Error())
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+
+	log.Printf("[商户登录成功] IP: %s, UID: %d", ip, user.UID)
 	c.SetCookie("user_token", token, 86400*30, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{
 		"code":  0,
@@ -72,10 +83,18 @@ func (h *UserHandler) RegPage(c *gin.Context) {
 
 // 注册
 func (h *UserHandler) Register(c *gin.Context) {
-	email := c.PostForm("email")
-	phone := c.PostForm("phone")
-	password := c.PostForm("password")
-	inviteCode := c.PostForm("invite_code")
+	var req struct {
+		Email      string `json:"email"`
+		Phone      string `json:"phone"`
+		Password   string `json:"password"`
+		InviteCode string `json:"invite_code"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
 	ip := middleware.GetRealIP(c)
 
 	// 验证码验证（TODO: 实际实现）
@@ -85,12 +104,14 @@ func (h *UserHandler) Register(c *gin.Context) {
 	//     return
 	// }
 
-	user, err := h.authSvc.UserRegister(email, phone, password, inviteCode, ip)
+	user, err := h.authSvc.UserRegister(req.Email, req.Phone, req.Password, req.InviteCode, ip)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+		log.Printf("[商户注册失败] IP: %s, 错误: %s", ip, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
 
+	log.Printf("[商户注册成功] IP: %s, UID: %d", ip, user.UID)
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"msg":  "注册成功",

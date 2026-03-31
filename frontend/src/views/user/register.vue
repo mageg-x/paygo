@@ -1,34 +1,3 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { userRegister } from '@/api/user'
-
-const router = useRouter()
-
-const form = ref({
-  email: '',
-  phone: '',
-  password: '',
-  invite_code: ''
-})
-const loading = ref(false)
-
-async function handleRegister() {
-  loading.value = true
-  try {
-    const res = await userRegister(form.value)
-    if (res.code === 0) {
-      alert('注册成功')
-      router.push('/user/login')
-    }
-  } catch (error) {
-    console.error('注册失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
-</script>
-
 <template>
   <div class="min-h-screen bg-gray-100 flex items-center justify-center">
     <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
@@ -71,3 +40,34 @@ async function handleRegister() {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { userRegister } from '@/api/user'
+
+const router = useRouter()
+
+const form = ref({
+  email: '',
+  phone: '',
+  password: '',
+  invite_code: ''
+})
+const loading = ref(false)
+
+async function handleRegister() {
+  loading.value = true
+  try {
+    const res = await userRegister(form.value)
+    if (res.code === 0) {
+      alert('注册成功')
+      router.push('/user/login')
+    }
+  } catch (error) {
+    console.error('注册失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+</script>

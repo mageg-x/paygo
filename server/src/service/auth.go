@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ func NewAuthService() *AuthService {
 func (s *AuthService) AdminLogin(username, password string) (string, error) {
 	cfg := config.AppConfig
 	if username != cfg.AdminUser || password != cfg.AdminPwd {
+		log.Printf("[admin_login_failed] username=%s, reason=invalid credentials", username)
 		return "", errors.New("用户名或密码错误")
 	}
 
@@ -41,10 +43,12 @@ func (s *AuthService) UserLogin(uid uint, pwd string) (*model.User, string, erro
 	var user model.User
 	result := config.DB.First(&user, uid)
 	if result.Error != nil {
+		log.Printf("[user_login_failed] uid=%d, reason=user not found, error=%s", uid, result.Error.Error())
 		return nil, "", errors.New("用户不存在")
 	}
 
 	if user.Status != 0 {
+		log.Printf("[user_login_failed] uid=%d, reason=user disabled, status=%d", uid, user.Status)
 		return nil, "", errors.New("账号已被禁用")
 	}
 
@@ -52,6 +56,7 @@ func (s *AuthService) UserLogin(uid uint, pwd string) (*model.User, string, erro
 	pwdHash := md5.Sum([]byte(pwd + user.Key))
 	pwdStr := hex.EncodeToString(pwdHash[:])
 	if pwdStr != user.Pwd {
+		log.Printf("[user_login_failed] uid=%d, reason=invalid password")
 		return nil, "", errors.New("密码错误")
 	}
 
@@ -69,14 +74,17 @@ func (s *AuthService) UserKeyLogin(uid uint, key string) (*model.User, string, e
 	var user model.User
 	result := config.DB.First(&user, uid)
 	if result.Error != nil {
+		log.Printf("[user_key_login_failed] uid=%d, reason=user not found, error=%s", uid, result.Error.Error())
 		return nil, "", errors.New("用户不存在")
 	}
 
 	if user.Status != 0 {
+		log.Printf("[user_key_login_failed] uid=%d, reason=user disabled, status=%d", uid, user.Status)
 		return nil, "", errors.New("账号已被禁用")
 	}
 
 	if key != user.Key {
+		log.Printf("[user_key_login_failed] uid=%d, reason=invalid key")
 		return nil, "", errors.New("密钥错误")
 	}
 
@@ -99,6 +107,7 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 	var regOpen model.Config
 	config.DB.First(&regOpen, "reg_open")
 	if regOpen.V != "1" && regOpen.V != "2" {
+		log.Printf("[user_register_failed] email=%s, phone=%s, reason=registration closed")
 		return nil, errors.New("注册已关闭")
 	}
 
@@ -107,6 +116,7 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 		var count int64
 		config.DB.Model(&model.User{}).Where("email = ?", email).Count(&count)
 		if count > 0 {
+			log.Printf("[user_register_failed] email=%s, reason=email already registered")
 			return nil, errors.New("邮箱已被注册")
 		}
 	}
@@ -115,6 +125,7 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 		var count int64
 		config.DB.Model(&model.User{}).Where("phone = ?", phone).Count(&count)
 		if count > 0 {
+			log.Printf("[user_register_failed] phone=%s, reason=phone already registered")
 			return nil, errors.New("手机号已被注册")
 		}
 	}
@@ -160,9 +171,11 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 
 	result := config.DB.Create(user)
 	if result.Error != nil {
+		log.Printf("[user_register_failed] email=%s, phone=%s, reason=create user failed, error=%s", email, phone, result.Error.Error())
 		return nil, errors.New("创建用户失败")
 	}
 
+	log.Printf("[user_register_success] uid=%d, email=%s, phone=%s, ip=%s", user.UID, email, phone, ip)
 	return user, nil
 }
 
@@ -212,6 +225,7 @@ func (s *AuthService) GenCode(scene, to string) (string, error) {
 
 	result := config.DB.Create(regcode)
 	if result.Error != nil {
+		log.Printf("[gen_code_failed] scene=%s, to=%s, error=%s", scene, to, result.Error.Error())
 		return "", result.Error
 	}
 

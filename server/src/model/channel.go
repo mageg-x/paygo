@@ -28,7 +28,7 @@ type Plugin struct {
 }
 
 func (Plugin) TableName() string {
-	return "paygo/plugin"
+	return "plugin"
 }
 
 // 支付通道表

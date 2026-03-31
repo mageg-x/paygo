@@ -1,3 +1,58 @@
+<template>
+  <div class="min-h-screen bg-gray-100 flex items-center justify-center">
+    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+      <template v-if="loading">
+        <div class="flex justify-center py-12">
+          <div class="loading-spinner w-8 h-8"></div>
+        </div>
+      </template>
+
+      <template v-else-if="order">
+        <div class="text-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">{{ order.name }}</h2>
+          <div class="text-3xl font-bold text-primary-600">
+            ¥{{ order.money }}
+          </div>
+        </div>
+
+        <div class="mb-6">
+          <div class="text-sm text-gray-600 mb-3">选择支付方式</div>
+          <div class="grid grid-cols-2 gap-3">
+            <button
+              v-for="pt in payTypes"
+              :key="pt.id"
+              :class="[
+                'p-4 rounded-xl border-2 text-center transition-all',
+                selectedType === pt.id
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              ]"
+              @click="selectPayType(pt.id)"
+            >
+              <div class="text-lg font-medium">{{ pt.name }}</div>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="qrCodeUrl" class="text-center mb-6">
+          <img :src="qrCodeUrl" alt="支付二维码" class="mx-auto mb-4" />
+          <p class="text-sm text-gray-500">请使用{{ selectedType === 'alipay' ? '支付宝' : selectedType === 'wxpay' ? '微信' : 'QQ' }}扫码支付</p>
+        </div>
+
+        <div class="text-center text-sm text-gray-500">
+          订单号: {{ tradeNo }}
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="text-center py-12">
+          <p class="text-gray-500">订单不存在或已过期</p>
+        </div>
+      </template>
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
@@ -18,14 +73,12 @@ const payTypes = [
 
 onMounted(async () => {
   try {
-    // 获取订单信息
     const res = await fetch(`/api/pay/query?trade_no=${tradeNo}`)
     const data = await res.json()
 
     if (data.code === 0) {
       order.value = data
 
-      // 生成二维码
       if (data.pay_info) {
         qrCodeUrl.value = await QRCode.toDataURL(data.pay_info, {
           width: 200,
@@ -44,62 +97,3 @@ function selectPayType(typeId: string) {
   selectedType.value = typeId
 }
 </script>
-
-<template>
-  <div class="min-h-screen bg-gray-100 flex items-center justify-center">
-    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-      <template v-if="loading">
-        <div class="flex justify-center py-12">
-          <div class="loading-spinner w-8 h-8"></div>
-        </div>
-      </template>
-
-      <template v-else-if="order">
-        <!-- 订单信息 -->
-        <div class="text-center mb-6">
-          <h2 class="text-2xl font-bold text-gray-800 mb-2">{{ order.name }}</h2>
-          <div class="text-3xl font-bold text-primary-600">
-            ¥{{ order.money }}
-          </div>
-        </div>
-
-        <!-- 支付方式选择 -->
-        <div class="mb-6">
-          <div class="text-sm text-gray-600 mb-3">选择支付方式</div>
-          <div class="grid grid-cols-2 gap-3">
-            <button
-              v-for="pt in payTypes"
-              :key="pt.id"
-              :class="[
-                'p-4 rounded-xl border-2 text-center transition-all',
-                selectedType === pt.id
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              ]"
-              @click="selectPayType(pt.id)"
-            >
-              <div class="text-lg font-medium">{{ pt.name }}</div>
-            </button>
-          </div>
-        </div>
-
-        <!-- 二维码 -->
-        <div v-if="qrCodeUrl" class="text-center mb-6">
-          <img :src="qrCodeUrl" alt="支付二维码" class="mx-auto mb-4" />
-          <p class="text-sm text-gray-500">请使用{{ selectedType === 'alipay' ? '支付宝' : selectedType === 'wxpay' ? '微信' : 'QQ' }}扫码支付</p>
-        </div>
-
-        <!-- 订单号 -->
-        <div class="text-center text-sm text-gray-500">
-          订单号: {{ tradeNo }}
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="text-center py-12">
-          <p class="text-gray-500">订单不存在或已过期</p>
-        </div>
-      </template>
-    </div>
-  </div>
-</template>

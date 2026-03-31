@@ -1,33 +1,3 @@
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getUserOrders } from '@/api/user'
-import dayjs from 'dayjs'
-
-const orders = ref<any[]>([])
-const loading = ref(false)
-const page = ref(1)
-const total = ref(0)
-
-async function fetchOrders() {
-  loading.value = true
-  try {
-    const res = await getUserOrders({ page: page.value, limit: 20 })
-    if (res.code === 0) {
-      orders.value = res.data || []
-      total.value = res.count || 0
-    }
-  } catch (error) {
-    console.error('获取订单列表失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchOrders()
-})
-</script>
-
 <template>
   <div>
     <h2 class="text-2xl font-bold text-gray-800 mb-6">我的订单</h2>
@@ -62,7 +32,7 @@ onMounted(() => {
           </tbody>
         </table>
 
-        <div class="pagination">
+        <div class="pagination text-sm">
           <button class="pagination-item" :disabled="page === 1" @click="page--; fetchOrders()">上一页</button>
           <span class="px-4">第 {{ page }} 页</span>
           <button class="pagination-item" @click="page++; fetchOrders()">下一页</button>
@@ -71,3 +41,33 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { getUserOrders } from '@/api/user'
+import dayjs from 'dayjs'
+
+const orders = ref<any[]>([])
+const loading = ref(false)
+const page = ref(1)
+const total = ref(0)
+
+async function fetchOrders() {
+  loading.value = true
+  try {
+    const res = await getUserOrders({ page: page.value, limit: 20 })
+    if (res.code === 0) {
+      orders.value = res.data || []
+      total.value = res.count || 0
+    }
+  } catch (error) {
+    console.error('获取订单列表失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchOrders()
+})
+</script>

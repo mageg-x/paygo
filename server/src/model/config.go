@@ -11,7 +11,7 @@ type Config struct {
 }
 
 func (Config) TableName() string {
-	return "paygo/config"
+	return "config"
 }
 
 // 缓存表

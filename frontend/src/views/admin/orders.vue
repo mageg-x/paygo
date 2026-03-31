@@ -1,77 +1,8 @@
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getOrderList, orderOp } from '@/api/admin'
-import dayjs from 'dayjs'
-
-interface Order {
-  trade_no: string
-  out_trade_no: string
-  uid: number
-  name: string
-  money: number
-  status: number
-  type: number
-  typename: string
-  addtime: string
-  endtime: string
-}
-
-const orders = ref<Order[]>([])
-const loading = ref(false)
-const page = ref(1)
-const total = ref(0)
-const status = ref(-1)
-
-const statusMap: Record<number, { text: string; class: string }> = {
-  0: { text: '待支付', class: 'badge-warning' },
-  1: { text: '已支付', class: 'badge-success' },
-  2: { text: '已退款', class: 'badge-info' },
-  3: { text: '已冻结', class: 'badge-danger' }
-}
-
-async function fetchOrders() {
-  loading.value = true
-  try {
-    const res = await getOrderList({ page: page.value, limit: 20, status })
-    if (res.code === 0) {
-      orders.value = res.data || []
-      total.value = res.count || 0
-    }
-  } catch (error) {
-    console.error('获取订单列表失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function handleOp(action: string, tradeNo: string) {
-  if (confirm(`确定要执行该操作吗？`)) {
-    try {
-      const res = await orderOp({ action, trade_no: tradeNo })
-      if (res.code === 0) {
-        alert('操作成功')
-        fetchOrders()
-      }
-    } catch (error) {
-      console.error('操作失败:', error)
-    }
-  }
-}
-
-function formatTime(time: string) {
-  return dayjs(time).format('YYYY-MM-DD HH:mm')
-}
-
-onMounted(() => {
-  fetchOrders()
-})
-</script>
-
 <template>
   <div>
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-bold text-gray-800">订单管理</h2>
-      <select v-model="status" @change="fetchOrders" class="form-input w-32">
+      <h2 class="text-2xl font-bold text-gray-800 ">订单管理</h2>
+      <select v-model="status" @change="fetchOrders" class="form-input w-32 max-w-28">
         <option :value="-1">全部</option>
         <option :value="0">待支付</option>
         <option :value="1">已支付</option>
@@ -111,25 +42,16 @@ onMounted(() => {
               </td>
               <td class="text-xs">{{ formatTime(order.addtime) }}</td>
               <td>
-                <button
-                  v-if="order.status === 1"
-                  class="text-danger hover:text-danger mr-2"
-                  @click="handleOp('refund', order.trade_no)"
-                >
+                <button v-if="order.status === 1" class="text-danger hover:text-danger mr-2"
+                  @click="handleOp('refund', order.trade_no)">
                   退款
                 </button>
-                <button
-                  v-if="order.status === 0"
-                  class="text-warning hover:text-warning mr-2"
-                  @click="handleOp('freeze', order.trade_no)"
-                >
+                <button v-if="order.status === 0" class="text-warning hover:text-warning mr-2"
+                  @click="handleOp('freeze', order.trade_no)">
                   冻结
                 </button>
-                <button
-                  v-if="order.status === 3"
-                  class="text-success hover:text-success"
-                  @click="handleOp('unfreeze', order.trade_no)"
-                >
+                <button v-if="order.status === 3" class="text-success hover:text-success"
+                  @click="handleOp('unfreeze', order.trade_no)">
                   解冻
                 </button>
               </td>
@@ -138,7 +60,7 @@ onMounted(() => {
         </table>
 
         <!-- 分页 -->
-        <div class="pagination">
+        <div class="pagination text-sm">
           <button class="pagination-item" :disabled="page === 1" @click="page--; fetchOrders()">
             上一页
           </button>
@@ -151,3 +73,72 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { getOrderList, orderOp } from '@/api/admin'
+import dayjs from 'dayjs'
+
+interface Order {
+  trade_no: string
+  out_trade_no: string
+  uid: number
+  name: string
+  money: number
+  status: number
+  type: number
+  typename: string
+  addtime: string
+  endtime: string
+}
+
+const orders = ref<Order[]>([])
+const loading = ref(false)
+const page = ref(1)
+const total = ref(0)
+const status = ref(-1)
+
+const statusMap: Record<number, { text: string; class: string }> = {
+  0: { text: '待支付', class: 'badge-warning' },
+  1: { text: '已支付', class: 'badge-success' },
+  2: { text: '已退款', class: 'badge-info' },
+  3: { text: '已冻结', class: 'badge-danger' }
+}
+
+async function fetchOrders() {
+  loading.value = true
+  try {
+    const res = await getOrderList({ page: page.value, limit: 20, status: status.value })
+    if (res.code === 0) {
+      orders.value = res.data || []
+      total.value = res.count || 0
+    }
+  } catch (error) {
+    console.error('获取订单列表失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleOp(action: string, tradeNo: string) {
+  if (confirm(`确定要执行该操作吗？`)) {
+    try {
+      const res = await orderOp({ action, trade_no: tradeNo })
+      if (res.code === 0) {
+        alert('操作成功')
+        fetchOrders()
+      }
+    } catch (error) {
+      console.error('操作失败:', error)
+    }
+  }
+}
+
+function formatTime(time: string) {
+  return dayjs(time).format('YYYY-MM-DD HH:mm')
+}
+
+onMounted(() => {
+  fetchOrders()
+})
+</script>

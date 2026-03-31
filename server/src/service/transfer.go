@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"paygo/src/config"
@@ -24,10 +25,12 @@ func (s *TransferService) CreateTransfer(uid uint, transferType, account, userna
 	// 获取商户
 	user, err := s.authSvc.GetUser(uid)
 	if err != nil {
+		log.Printf("[create_transfer_failed] uid=%d, transfer_type=%s, money=%.2f, reason=merchant not found, error=%s", uid, transferType, money, err.Error())
 		return nil, errors.New("商户不存在")
 	}
 
 	if user.Transfer != 1 {
+		log.Printf("[create_transfer_failed] uid=%d, transfer_type=%s, money=%.2f, reason=merchant no transfer permission")
 		return nil, errors.New("商户没有转账权限")
 	}
 
@@ -46,11 +49,13 @@ func (s *TransferService) CreateTransfer(uid uint, transferType, account, userna
 
 	enabled := s.authSvc.GetConfig(cfgKey)
 	if enabled != "1" {
+		log.Printf("[create_transfer_failed] uid=%d, transfer_type=%s, money=%.2f, reason=transfer type not enabled")
 		return nil, errors.New("该转账方式未开启")
 	}
 
 	// 检查余额
 	if user.Money < money {
+		log.Printf("[create_transfer_failed] uid=%d, transfer_type=%s, money=%.2f, balance=%.2f, reason=insufficient balance")
 		return nil, errors.New("余额不足")
 	}
 
@@ -85,6 +90,7 @@ func (s *TransferService) CreateTransfer(uid uint, transferType, account, userna
 
 	if err := tx.Create(transfer).Error; err != nil {
 		tx.Rollback()
+		log.Printf("[create_transfer_failed] uid=%d, biz_no=%s, reason=create transfer record failed, error=%s", uid, bizNo, err.Error())
 		return nil, errors.New("创建转账记录失败")
 	}
 
@@ -113,6 +119,7 @@ func (s *TransferService) QueryTransfer(bizNo string) (*model.Transfer, error) {
 	var transfer model.Transfer
 	result := config.DB.Where("biz_no = ?", bizNo).First(&transfer)
 	if result.Error != nil {
+		log.Printf("[query_transfer_failed] biz_no=%s, reason=transfer not found, error=%s", bizNo, result.Error.Error())
 		return nil, errors.New("转账记录不存在")
 	}
 	return &transfer, nil
@@ -128,6 +135,7 @@ func (s *TransferService) GetUserTransfers(uid uint, page, pageSize int) ([]mode
 
 	result := query.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&transfers)
 	if result.Error != nil {
+		log.Printf("[get_user_transfers_failed] uid=%d, reason=query failed, error=%s", uid, result.Error.Error())
 		return nil, 0, result.Error
 	}
 
@@ -147,6 +155,7 @@ func (s *TransferService) UpdateTransferStatus(bizNo string, status int, result 
 func (s *TransferService) QueryBalance(uid uint) (float64, error) {
 	user, err := s.authSvc.GetUser(uid)
 	if err != nil {
+		log.Printf("[query_balance_failed] uid=%d, reason=merchant not found, error=%s", uid, err.Error())
 		return 0, errors.New("商户不存在")
 	}
 	return user.Money, nil
@@ -156,10 +165,12 @@ func (s *TransferService) QueryBalance(uid uint) (float64, error) {
 func (s *TransferService) RefundTransfer(bizNo string) error {
 	var transfer model.Transfer
 	if config.DB.First(&transfer, "biz_no = ?", bizNo).Error != nil {
+		log.Printf("[refund_transfer_failed] biz_no=%s, reason=transfer not found")
 		return errors.New("转账记录不存在")
 	}
 
 	if transfer.Status != 1 { // 只有成功的才能退款
+		log.Printf("[refund_transfer_failed] biz_no=%s, status=%d, reason=invalid status for refund")
 		return errors.New("状态不允许退款")
 	}
 
@@ -200,6 +211,7 @@ func (s *TransferService) RefundTransfer(bizNo string) error {
 func (s *TransferService) GetTransferDetail(bizNo string) (map[string]interface{}, error) {
 	var transfer model.Transfer
 	if config.DB.First(&transfer, "biz_no = ?", bizNo).Error != nil {
+		log.Printf("[get_transfer_detail_failed] biz_no=%s, reason=transfer not found")
 		return nil, errors.New("转账记录不存在")
 	}
 
@@ -226,6 +238,7 @@ func (s *TransferService) GetUserRecords(uid uint, action int, page, pageSize in
 
 	result := query.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&records)
 	if result.Error != nil {
+		log.Printf("[get_user_records_failed] uid=%d, action=%d, reason=query failed, error=%s", uid, action, result.Error.Error())
 		return nil, 0, result.Error
 	}
 
@@ -236,6 +249,7 @@ func (s *TransferService) GetUserRecords(uid uint, action int, page, pageSize in
 func (s *TransferService) AdminChangeMoney(uid uint, money float64, typ string, remark string) error {
 	var user model.User
 	if config.DB.First(&user, uid).Error != nil {
+		log.Printf("[admin_change_money_failed] uid=%d, money=%.2f, type=%s, reason=merchant not found")
 		return errors.New("商户不存在")
 	}
 
@@ -243,6 +257,7 @@ func (s *TransferService) AdminChangeMoney(uid uint, money float64, typ string, 
 	newMoney := oldMoney + money
 
 	if newMoney < 0 {
+		log.Printf("[admin_change_money_failed] uid=%d, money=%.2f, type=%s, old_money=%.2f, reason=result would be negative")
 		return errors.New("余额不能为负数")
 	}
 

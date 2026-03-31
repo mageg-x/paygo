@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -41,6 +42,7 @@ func (h *PayHandler) Submit(c *gin.Context) {
 
 	money, _ := strconv.ParseFloat(moneyStr, 10)
 	if money <= 0 {
+		log.Printf("[pay_submit_failed] pid=%d, out_trade_no=%s, money=%s, reason=invalid amount")
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "金额必须大于0"})
 		return
 	}
@@ -62,6 +64,7 @@ func (h *PayHandler) Submit(c *gin.Context) {
 
 	result, err := h.paymentSvc.SubmitPayment(params)
 	if err != nil {
+		log.Printf("[pay_submit_failed] pid=%d, out_trade_no=%s, money=%.2f, reason=%s", pid, outTradeNo, money, err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -93,6 +96,7 @@ func (h *PayHandler) Create(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[pay_create_failed] reason=invalid json params, error=%s", err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
@@ -112,6 +116,7 @@ func (h *PayHandler) Create(c *gin.Context) {
 
 	result, err := h.paymentSvc.SubmitPayment(params)
 	if err != nil {
+		log.Printf("[pay_create_failed] pid=%d, out_trade_no=%s, money=%.2f, reason=%s", req.PID, req.OutTradeNo, req.Money, err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -141,17 +146,20 @@ func (h *PayHandler) Query(c *gin.Context) {
 	} else if outTradeNo != "" {
 		order, err = h.orderSvc.GetOrderByOutTradeNo(outTradeNo, uint(pid))
 	} else {
+		log.Printf("[pay_query_failed] pid=%d, trade_no=%s, out_trade_no=%s, reason=missing order number")
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "缺少订单号"})
 		return
 	}
 
 	if err != nil {
+		log.Printf("[pay_query_failed] pid=%d, trade_no=%s, out_trade_no=%s, reason=%s", pid, tradeNo, outTradeNo, err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "订单不存在"})
 		return
 	}
 
 	// 验证订单所属
 	if order.UID != uint(pid) {
+		log.Printf("[pay_query_failed] pid=%d, trade_no=%s, order_uid=%d, reason=order does not belong to merchant")
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "订单不属于该商户"})
 		return
 	}
@@ -183,6 +191,7 @@ func (h *PayHandler) Refund(c *gin.Context) {
 
 	err := h.paymentSvc.Refund(tradeNo, money)
 	if err != nil {
+		log.Printf("[pay_refund_failed] trade_no=%s, money=%.2f, reason=%s", tradeNo, money, err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -197,6 +206,7 @@ func (h *PayHandler) Notify(c *gin.Context) {
 	// 获取订单对应的通道插件
 	order, err := h.orderSvc.GetOrder(tradeNo)
 	if err != nil {
+		log.Printf("[pay_notify_failed] trade_no=%s, reason=get order failed, error=%s", tradeNo, err.Error())
 		c.String(http.StatusOK, "fail")
 		return
 	}
@@ -204,12 +214,14 @@ func (h *PayHandler) Notify(c *gin.Context) {
 	// 获取通道信息
 	channel, err := h.paymentSvc.GetChannelConfig(order.Channel)
 	if err != nil {
+		log.Printf("[pay_notify_failed] trade_no=%s, reason=get channel failed, error=%s", tradeNo, err.Error())
 		c.String(http.StatusOK, "fail")
 		return
 	}
 
-	result, err := h.paymentSvc.HandleNotify(tradeNo, channel.Plugin)
+	result, err := h.paymentSvc.HandleNotify(tradeNo, channel.Plugin, c)
 	if err != nil || !result["success"].(bool) {
+		log.Printf("[pay_notify_failed] trade_no=%s, plugin=%s, reason=handle notify failed, error=%s", tradeNo, channel.Plugin, err.Error())
 		c.String(http.StatusOK, "fail")
 		return
 	}
@@ -223,8 +235,21 @@ func (h *PayHandler) Return(c *gin.Context) {
 
 	order, err := h.orderSvc.GetOrder(tradeNo)
 	if err != nil {
+		log.Printf("[pay_return_failed] trade_no=%s, reason=get order failed, error=%s", tradeNo, err.Error())
 		c.Redirect(http.StatusFound, "/?error=订单不存在")
 		return
+	}
+
+	// 获取通道信息，调用插件处理同步回调
+	channel, err := h.paymentSvc.GetChannelConfig(order.Channel)
+	if err == nil {
+		result, err := h.paymentSvc.HandleReturn(tradeNo, channel.Plugin, c)
+		if err == nil && result.Success {
+			if result.URL != "" {
+				c.Redirect(http.StatusFound, result.URL)
+				return
+			}
+		}
 	}
 
 	if order.Status == 1 {
@@ -241,6 +266,7 @@ func (h *PayHandler) GetTypes(c *gin.Context) {
 
 	types, err := h.paymentSvc.GetAvailableTypes(uint(pid))
 	if err != nil {
+		log.Printf("[get_types_failed] pid=%d, reason=%s", pid, err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
@@ -255,6 +281,7 @@ func (h *PayHandler) GetChannels(c *gin.Context) {
 
 	channels, err := h.paymentSvc.GetAvailableChannels(uint(pid), typeID)
 	if err != nil {
+		log.Printf("[get_channels_failed] pid=%d, type_id=%d, reason=%s", pid, typeID, err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}

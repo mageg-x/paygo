@@ -1,13 +1,30 @@
 package wxpay
 
 import (
+	"context"
+	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/md5"
-	"encoding/hex"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io"
+	"log"
+	"os"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/wechatpay-apiv3/wechatpay-go/core"
+	"github.com/wechatpay-apiv3/wechatpay-go/core/option"
+	"paygo/src/config"
+	"paygo/src/model"
 	"paygo/src/plugin"
 )
 
@@ -15,6 +32,20 @@ import (
 type WxpayPlugin struct {
 	plugin.BasePlugin
 }
+
+// 配置结构
+type WxpayConfig struct {
+	AppID      string `json:"appid"`
+	AppKey     string `json:"appkey"`   // APIv3密钥(平台证书密钥)
+	MchID      string `json:"appmchid"` // 商户号
+	AppSecret  string `json:"appsecret"`
+	CertPath   string `json:"cert_path"`
+	KeyPath    string `json:"key_path"`
+	SerialNo   string `json:"serial_no"` // 证书序列号
+}
+
+// 客户端缓存
+var clientCache = make(map[string]*core.Client)
 
 func New() plugin.Plugin {
 	return &WxpayPlugin{}
@@ -33,76 +64,246 @@ func (p *WxpayPlugin) GetInfo() plugin.PluginInfo {
 		Types:      []string{"wxpay"},
 		Transtypes: []string{"wxpay", "bank"},
 		Inputs: map[string]plugin.InputConfig{
-			"appid":     {Name: "公众账号ID", Type: "input"},
-			"appkey":    {Name: "API密钥", Type: "input"},
-			"appsecret": {Name: "AppSecret", Type: "input"},
-			"appmchid":  {Name: "商户号", Type: "input"},
+			"appid":    {Name: "应用ID(AppID)", Type: "input"},
+			"appkey":   {Name: "APIv3密钥", Type: "input"},
+			"appmchid": {Name: "商户号", Type: "input"},
 		},
 		Select: map[string]string{
-			"1": "公众号支付",
-			"2": "原生扫码支付",
-			"3": "APP支付",
-			"4": "H5支付",
-			"5": "小程序支付",
+			"1": "扫码支付",
+			"2": "公众号支付",
+			"3": "H5支付",
+			"4": "小程序支付",
+			"5": "APP支付",
 		},
-		Note: "<p>微信支付官方接口</p>",
+		Note: "<p>微信支付官方接口 V3</p>",
 	}
+}
+
+// 获取配置
+func (p *WxpayPlugin) getConfig(channel model.Channel) (*WxpayConfig, error) {
+	cfg := &WxpayConfig{}
+	if channel.Config != "" {
+		if err := json.Unmarshal([]byte(channel.Config), cfg); err != nil {
+			log.Printf("[wxpay_get_config_failed] channel_id=%d, reason=parse config failed, error=%s", channel.ID, err.Error())
+			return nil, err
+		}
+	}
+	return cfg, nil
+}
+
+// 获取微信支付客户端
+func (p *WxpayPlugin) getClient(channel model.Channel) (*core.Client, error) {
+	key := fmt.Sprintf("%s_%d", channel.Plugin, channel.ID)
+	if client, ok := clientCache[key]; ok {
+		return client, nil
+	}
+
+	cfg, err := p.getConfig(channel)
+	if err != nil {
+		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=get config failed, error=%s", channel.ID, err.Error())
+		return nil, err
+	}
+
+	// 加载私钥
+	privateKey, err := p.loadPrivateKey(cfg.KeyPath)
+	if err != nil {
+		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=load private key failed, error=%s", channel.ID, err.Error())
+		return nil, fmt.Errorf("加载私钥失败: %v", err)
+	}
+
+	// 解析私钥
+	block, _ := pem.Decode([]byte(privateKey))
+	if block == nil {
+		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=invalid private key format")
+		return nil, fmt.Errorf("私钥格式错误")
+	}
+	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=parse private key failed, error=%s", channel.ID, err.Error())
+		return nil, fmt.Errorf("解析私钥失败: %v", err)
+	}
+
+	// 创建客户端，不验签（验签在回调时单独处理）
+	opts := []core.ClientOption{
+		option.WithoutValidator(),
+	}
+	if cfg.SerialNo != "" && rsaKey != nil {
+		opts = append(opts, option.WithMerchantCredential(cfg.MchID, cfg.SerialNo, rsaKey))
+	}
+
+	client, err := core.NewClient(context.Background(), opts...)
+	if err != nil {
+		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=create client failed, error=%s", channel.ID, err.Error())
+		return nil, fmt.Errorf("创建客户端失败: %v", err)
+	}
+
+	clientCache[key] = client
+	return client, nil
+}
+
+// 加载私钥
+func (p *WxpayPlugin) loadPrivateKey(keyPath string) (string, error) {
+	data, err := os.ReadFile(keyPath)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 // 提交支付
 func (p *WxpayPlugin) Submit(params map[string]interface{}) (plugin.SubmitResult, error) {
 	method := params["method"].(string)
+	channel := params["channel"].(model.Channel)
 
 	switch method {
 	case "scan":
-		return p.submitScan(params)
+		return p.submitScan(params, channel)
 	case "jsapi":
-		return p.submitJSAPI(params)
+		return p.submitJSAPI(params, channel)
 	case "app":
-		return p.submitApp(params)
-	case "wap":
-		return p.submitH5(params)
+		return p.submitApp(params, channel)
+	case "wap", "h5":
+		return p.submitH5(params, channel)
 	default:
-		return p.submitScan(params)
+		return p.submitScan(params, channel)
 	}
 }
 
-func (p *WxpayPlugin) submitScan(params map[string]interface{}) (plugin.SubmitResult, error) {
-	tradeNo := params["trade_no"].(string)
-	money := params["money"].(float64)
-	name := params["name"].(string)
-	notifyURL := params["notify_url"].(string)
-	ip := params["ip"].(string)
-
-	// 构造统一下单参数
-	xmlData := p.buildUnifiedOrderXML(tradeNo, money, name, notifyURL, ip, "NATIVE")
-
-	// 调用微信统一下单接口
-	codeURL := p.callUnifiedOrder(xmlData)
-
-	return plugin.SubmitResult{
-		Type: "qrcode",
-		URL:  codeURL,
-	}, nil
+// 统一下单请求结构
+type UnifiedOrderRequest struct {
+	Appid       string `json:"appid"`
+	Mchid       string `json:"mchid"`
+	Description string `json:"description"`
+	OutTradeNo  string `json:"out_trade_no"`
+	NotifyUrl   string `json:"notify_url"`
+	Amount      struct {
+		Total    int    `json:"total"`
+		Currency string `json:"currency"`
+	} `json:"amount"`
+	Payer struct {
+		Openid string `json:"openid,omitempty"`
+	} `json:"payer,omitempty"`
+	SceneInfo struct {
+		PayerClientIp string `json:"payer_client_ip"`
+		H5Info        struct {
+			Type string `json:"type"`
+		} `json:"h5_info"`
+	} `json:"scene_info,omitempty"`
 }
 
-func (p *WxpayPlugin) submitJSAPI(params map[string]interface{}) (plugin.SubmitResult, error) {
+// 扫码支付
+func (p *WxpayPlugin) submitScan(params map[string]interface{}, channel model.Channel) (plugin.SubmitResult, error) {
+	client, err := p.getClient(channel)
+	if err != nil {
+		log.Printf("[wxpay_submit_scan_failed] channel_id=%d, reason=%s", channel.ID, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
+
+	cfg, _ := p.getConfig(channel)
 	tradeNo := params["trade_no"].(string)
 	money := params["money"].(float64)
 	name := params["name"].(string)
 	notifyURL := params["notify_url"].(string)
 	ip := params["ip"].(string)
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
+
+	req := UnifiedOrderRequest{
+		Appid:       cfg.AppID,
+		Mchid:       cfg.MchID,
+		Description: name,
+		OutTradeNo:  tradeNo,
+		NotifyUrl:   notifyURL,
+	}
+	req.Amount.Total = int(money * 100)
+	req.Amount.Currency = "CNY"
+
+	result, err := client.Post(context.Background(), "/v3/pay/transactions/native", req)
+	if err != nil {
+		log.Printf("[wxpay_submit_scan_failed] trade_no=%s, reason=http post failed, error=%s", tradeNo, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
+
+	body, _ := io.ReadAll(result.Response.Body)
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	codeUrl, _ := resp["code_url"].(string)
+	if codeUrl != "" {
+		log.Printf("[wxpay_submit_scan_success] trade_no=%s", tradeNo)
+		return plugin.SubmitResult{
+			Type: "qrcode",
+			URL:  codeUrl,
+		}, nil
+	}
+
+	log.Printf("[wxpay_submit_scan_failed] trade_no=%s, reason=no code_url returned")
+	return plugin.SubmitResult{Msg: "获取二维码失败"}, nil
+}
+
+// JSAPI支付
+func (p *WxpayPlugin) submitJSAPI(params map[string]interface{}, channel model.Channel) (plugin.SubmitResult, error) {
+	client, err := p.getClient(channel)
+	if err != nil {
+		log.Printf("[wxpay_submit_jsapi_failed] channel_id=%d, reason=%s", channel.ID, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
+
+	cfg, _ := p.getConfig(channel)
+	tradeNo := params["trade_no"].(string)
+	money := params["money"].(float64)
+	name := params["name"].(string)
+	notifyURL := params["notify_url"].(string)
 	openid := params["openid"].(string)
 
-	// 构造统一下单参数
-	xmlData := p.buildUnifiedOrderXML(tradeNo, money, name, notifyURL, ip, "JSAPI")
-	xmlData += fmt.Sprintf("<openid>%s</openid>", openid)
+	if openid == "" {
+		log.Printf("[wxpay_submit_jsapi_failed] trade_no=%s, reason=openid is empty")
+		return plugin.SubmitResult{Msg: "openid不能为空"}, nil
+	}
 
-	// 调用微信统一下单接口
-	prepayID := p.callUnifiedOrder(xmlData)
+	req := UnifiedOrderRequest{
+		Appid:       cfg.AppID,
+		Mchid:       cfg.MchID,
+		Description: name,
+		OutTradeNo:  tradeNo,
+		NotifyUrl:   notifyURL,
+	}
+	req.Amount.Total = int(money * 100)
+	req.Amount.Currency = "CNY"
+	req.Payer.Openid = openid
 
-	// 构造JSAPI调起参数
-	jsApiParams := p.buildJSAPIPayParams(prepayID)
+	result, err := client.Post(context.Background(), "/v3/pay/transactions/jsapi", req)
+	if err != nil {
+		log.Printf("[wxpay_submit_jsapi_failed] trade_no=%s, reason=http post failed, error=%s", tradeNo, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
+
+	body, _ := io.ReadAll(result.Response.Body)
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	prepayId, _ := resp["prepay_id"].(string)
+	if prepayId == "" {
+		log.Printf("[wxpay_submit_jsapi_failed] trade_no=%s, reason=no prepay_id returned")
+		return plugin.SubmitResult{Msg: "prepay_id获取失败"}, nil
+	}
+
+	// 构造调起支付参数
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonceStr := p.generateNonceStr(32)
+
+	signStr := fmt.Sprintf("%s\n%s\n%s\n%s\n", cfg.AppID, timestamp, nonceStr, prepayId)
+	signature, _ := p.sign(signStr, cfg.AppKey)
+
+	jsApiParams := map[string]interface{}{
+		"appId":     cfg.AppID,
+		"timeStamp": timestamp,
+		"nonceStr":  nonceStr,
+		"package":   fmt.Sprintf("prepay_id=%s", prepayId),
+		"signType":  "RSA",
+		"paySign":   signature,
+	}
 
 	return plugin.SubmitResult{
 		Type: "jsapi",
@@ -110,21 +311,61 @@ func (p *WxpayPlugin) submitJSAPI(params map[string]interface{}) (plugin.SubmitR
 	}, nil
 }
 
-func (p *WxpayPlugin) submitApp(params map[string]interface{}) (plugin.SubmitResult, error) {
+// APP支付
+func (p *WxpayPlugin) submitApp(params map[string]interface{}, channel model.Channel) (plugin.SubmitResult, error) {
+	client, err := p.getClient(channel)
+	if err != nil {
+		log.Printf("[wxpay_submit_app_failed] channel_id=%d, reason=%s", channel.ID, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
+
+	cfg, _ := p.getConfig(channel)
 	tradeNo := params["trade_no"].(string)
 	money := params["money"].(float64)
 	name := params["name"].(string)
 	notifyURL := params["notify_url"].(string)
-	ip := params["ip"].(string)
 
-	// 构造统一下单参数
-	xmlData := p.buildUnifiedOrderXML(tradeNo, money, name, notifyURL, ip, "APP")
+	req := UnifiedOrderRequest{
+		Appid:       cfg.AppID,
+		Mchid:       cfg.MchID,
+		Description: name,
+		OutTradeNo:  tradeNo,
+		NotifyUrl:   notifyURL,
+	}
+	req.Amount.Total = int(money * 100)
+	req.Amount.Currency = "CNY"
 
-	// 调用微信统一下单接口
-	prepayID := p.callUnifiedOrder(xmlData)
+	result, err := client.Post(context.Background(), "/v3/pay/transactions/app", req)
+	if err != nil {
+		log.Printf("[wxpay_submit_app_failed] trade_no=%s, reason=http post failed, error=%s", tradeNo, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
 
-	// 构造APP调起参数
-	appParams := p.buildAPPPayParams(prepayID)
+	body, _ := io.ReadAll(result.Response.Body)
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	prepayId, _ := resp["prepay_id"].(string)
+	if prepayId == "" {
+		log.Printf("[wxpay_submit_app_failed] trade_no=%s, reason=no prepay_id returned")
+		return plugin.SubmitResult{Msg: "prepay_id获取失败"}, nil
+	}
+
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonceStr := p.generateNonceStr(32)
+
+	signStr := fmt.Sprintf("%s\n%s\n%s\n%s\n", cfg.AppID, timestamp, nonceStr, prepayId)
+	signature, _ := p.sign(signStr, cfg.AppKey)
+
+	appParams := map[string]interface{}{
+		"appid":     cfg.AppID,
+		"partnerid": cfg.MchID,
+		"prepayid":  prepayId,
+		"package":   "Sign=WXPay",
+		"timestamp": timestamp,
+		"noncestr":  nonceStr,
+		"sign":      signature,
+	}
 
 	return plugin.SubmitResult{
 		Type: "app",
@@ -132,151 +373,201 @@ func (p *WxpayPlugin) submitApp(params map[string]interface{}) (plugin.SubmitRes
 	}, nil
 }
 
-func (p *WxpayPlugin) submitH5(params map[string]interface{}) (plugin.SubmitResult, error) {
+// H5支付
+func (p *WxpayPlugin) submitH5(params map[string]interface{}, channel model.Channel) (plugin.SubmitResult, error) {
+	client, err := p.getClient(channel)
+	if err != nil {
+		log.Printf("[wxpay_submit_h5_failed] channel_id=%d, reason=%s", channel.ID, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
+
+	cfg, _ := p.getConfig(channel)
 	tradeNo := params["trade_no"].(string)
 	money := params["money"].(float64)
 	name := params["name"].(string)
 	notifyURL := params["notify_url"].(string)
 	ip := params["ip"].(string)
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
 
-	// 构造统一下单参数
-	xmlData := p.buildUnifiedOrderXML(tradeNo, money, name, notifyURL, ip, "MWEB")
+	req := UnifiedOrderRequest{
+		Appid:       cfg.AppID,
+		Mchid:       cfg.MchID,
+		Description: name,
+		OutTradeNo:  tradeNo,
+		NotifyUrl:   notifyURL,
+	}
+	req.Amount.Total = int(money * 100)
+	req.Amount.Currency = "CNY"
+	req.SceneInfo.PayerClientIp = ip
+	req.SceneInfo.H5Info.Type = "Wap"
 
-	// 调用微信统一下单接口
-	mwebURL := p.callUnifiedOrder(xmlData)
+	result, err := client.Post(context.Background(), "/v3/pay/transactions/h5", req)
+	if err != nil {
+		log.Printf("[wxpay_submit_h5_failed] trade_no=%s, reason=http post failed, error=%s", tradeNo, err.Error())
+		return plugin.SubmitResult{Msg: err.Error()}, err
+	}
 
+	body, _ := io.ReadAll(result.Response.Body)
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	h5Url, _ := resp["h5_url"].(string)
+	if h5Url == "" {
+		log.Printf("[wxpay_submit_h5_failed] trade_no=%s, reason=no h5_url returned")
+		return plugin.SubmitResult{Msg: "h5_url获取失败"}, nil
+	}
+
+	log.Printf("[wxpay_submit_h5_success] trade_no=%s", tradeNo)
 	return plugin.SubmitResult{
 		Type: "jump",
-		URL:  mwebURL,
+		URL:  h5Url,
 	}, nil
-}
-
-func (p *WxpayPlugin) buildUnifiedOrderXML(tradeNo string, money float64, name, notifyURL, ip, tradeType string) string {
-	// TODO: 获取真实配置
-	appid := ""
-	mchid := ""
-	apiKey := ""
-
-	nonceStr := p.generateNonceStr(32)
-	totalFee := int(money * 100) // 分
-
-	xml := fmt.Sprintf(`<xml>
-<appid>%s</appid>
-<mch_id>%s</mch_id>
-<nonce_str>%s</nonce_str>
-<body>%s</body>
-<out_trade_no>%s</out_trade_no>
-<total_fee>%d</total_fee>
-<spbill_create_ip>%s</spbill_create_ip>
-<notify_url>%s</notify_url>
-<trade_type>%s</trade_type>
-</xml>`, appid, mchid, nonceStr, name, tradeNo, totalFee, ip, notifyURL, tradeType)
-
-	// 签名
-	sign := p.signXML(xml, apiKey)
-	xml = strings.Replace(xml, "</xml>", fmt.Sprintf("<sign>%s</sign></xml>", sign), 1)
-
-	return xml
-}
-
-func (p *WxpayPlugin) signXML(xml, key string) string {
-	// 解析XML获取签名内容
-	// 实际应该按微信文档进行排序签名
-	return md5Hash(xml + key)
-}
-
-func (p *WxpayPlugin) callUnifiedOrder(xmlData string) string {
-	// TODO: 调用微信统一下单接口
-	// POST https://api.mch.weixin.qq.com/pay/unifiedorder
-
-	return "weixin://wxpay/bizpayurl?pr=xxx"
-}
-
-func (p *WxpayPlugin) buildJSAPIPayParams(prepayID string) map[string]string {
-	// TODO: 获取真实配置
-	appid := ""
-	apiKey := ""
-
-	nonceStr := p.generateNonceStr(32)
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-
-	signStr := fmt.Sprintf("appId=%s&nonceStr=%s&package=prepay_id=%s&signType=MD5&timeStamp=%s&key=%s",
-		appid, nonceStr, prepayID, timestamp, apiKey)
-	sign := md5Hash(signStr)
-
-	return map[string]string{
-		"appId":     appid,
-		"timeStamp": timestamp,
-		"nonceStr":  nonceStr,
-		"package":   "prepay_id=" + prepayID,
-		"signType":  "MD5",
-		"paySign":   sign,
-	}
-}
-
-func (p *WxpayPlugin) buildAPPPayParams(prepayID string) map[string]string {
-	// TODO: 获取真实配置
-	appid := ""
-	mchid := ""
-	apiKey := ""
-
-	nonceStr := p.generateNonceStr(32)
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-
-	signStr := fmt.Sprintf("appid=%s&partnerid=%s&prepayid=%s&package=Sign=WXPay&timestamp=%s&nonce=%s&key=%s",
-		appid, mchid, prepayID, timestamp, nonceStr, apiKey)
-	sign := md5Hash(signStr)
-
-	return map[string]string{
-		"appid":     appid,
-		"partnerid": mchid,
-		"prepayid":  prepayID,
-		"package":   "Sign=WXPay",
-		"timestamp": timestamp,
-		"noncestr":  nonceStr,
-		"sign":      sign,
-	}
-}
-
-func (p *WxpayPlugin) generateNonceStr(length int) string {
-	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	result := make([]byte, length)
-	for i := range result {
-		result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
-	}
-	return string(result)
-}
-
-func md5Hash(s string) string {
-	h := md5.New()
-	h.Write([]byte(s))
-	return hex.EncodeToString(h.Sum(nil))
 }
 
 // 移动端提交
 func (p *WxpayPlugin) Mapi(params map[string]interface{}) (plugin.SubmitResult, error) {
-	return p.submitH5(params)
+	return p.submitH5(params, params["channel"].(model.Channel))
 }
 
 // 异步回调
-func (p *WxpayPlugin) Notify(tradeNo string) (plugin.NotifyResult, error) {
-	// TODO: 实现微信支付异步回调处理
-	// 1. 验签
-	// 2. 解析回调数据
-	// 3. 返回结果
+func (p *WxpayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResult, error) {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=read body failed, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: err.Error()}, err
+	}
 
-	return plugin.NotifyResult{
-		Success:    true,
-		TradeNo:    tradeNo,
-		APITradeNo: "wx202403151234567890",
-		Amount:     100.00,
-		Buyer:      "oXXXX",
-		Message:    "成功",
-	}, nil
+	// 获取订单
+	var order model.Order
+	if err := config.DB.Where("trade_no = ?", tradeNo).First(&order).Error; err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=order not found, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: "订单不存在"}, err
+	}
+
+	// 获取通道
+	var channel model.Channel
+	if err := config.DB.First(&channel, order.Channel).Error; err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=channel not found, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: "通道不存在"}, err
+	}
+
+	cfg, err := p.getConfig(channel)
+	if err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=get config failed, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: err.Error()}, err
+	}
+
+	// 解析回调数据
+	var notifyData map[string]interface{}
+	if err := json.Unmarshal(body, &notifyData); err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=parse notify data failed, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: "解析通知数据失败"}, err
+	}
+
+	resource, ok := notifyData["resource"].(map[string]interface{})
+	if !ok {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=missing resource field")
+		return plugin.NotifyResult{Success: false, Message: "缺少resource字段"}, nil
+	}
+
+	ciphertext, _ := resource["ciphertext"].(string)
+	nonce, _ := resource["nonce"].(string)
+	associatedData, _ := resource["associated_data"].(string)
+
+	plaintext, err := p.decryptCiphertext(ciphertext, nonce, associatedData, cfg.AppKey)
+	if err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=decrypt failed, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: "解密失败: " + err.Error()}, err
+	}
+
+	var result struct {
+		OutTradeNo    string `json:"out_trade_no"`
+		TransactionId string `json:"transaction_id"`
+		TradeState    string `json:"trade_state"`
+		TradeStateDesc string `json:"trade_state_desc"`
+		Amount        struct {
+			Total int `json:"total"`
+		} `json:"amount"`
+		Payer struct {
+			Openid string `json:"openid"`
+		} `json:"payer"`
+	}
+
+	if err := json.Unmarshal([]byte(plaintext), &result); err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=parse decrypted data failed, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: "解析解密数据失败"}, err
+	}
+
+	// 验证订单号
+	if result.OutTradeNo != tradeNo {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, expected=%s, got=%s, reason=trade no mismatch")
+		return plugin.NotifyResult{Success: false, Message: "订单号不匹配"}, nil
+	}
+
+	// 验证金额
+	if float64(result.Amount.Total)/100 != order.Realmoney {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, expected=%.2f, got=%.2f, reason=amount mismatch")
+		return plugin.NotifyResult{Success: false, Message: "金额不匹配"}, nil
+	}
+
+	// 交易状态
+	if result.TradeState == "SUCCESS" {
+		log.Printf("[wxpay_notify_success] trade_no=%s, transaction_id=%s, amount=%.2f", tradeNo, result.TransactionId, float64(result.Amount.Total)/100)
+		return plugin.NotifyResult{
+			Success:    true,
+			TradeNo:   tradeNo,
+			APITradeNo: result.TransactionId,
+			Amount:    float64(result.Amount.Total) / 100,
+			Buyer:     result.Payer.Openid,
+			Message:   "成功",
+		}, nil
+	}
+
+	log.Printf("[wxpay_notify_failed] trade_no=%s, trade_state=%s, desc=%s", tradeNo, result.TradeState, result.TradeStateDesc)
+	return plugin.NotifyResult{Success: false, Message: result.TradeStateDesc}, nil
+}
+
+// 解密
+func (p *WxpayPlugin) decryptCiphertext(ciphertext, nonce, associatedData, apiKey string) (string, error) {
+	cipherBytes, err := base64.StdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return "", err
+	}
+
+	// 密钥 MD5
+	h := md5.New()
+	h.Write([]byte(apiKey))
+	key := h.Sum(nil)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	if len(cipherBytes) < 12 {
+		return "", fmt.Errorf("ciphertext too short")
+	}
+
+	nonceBytes := []byte(nonce)
+	cipherBytes = cipherBytes[12:]
+
+	plaintext, err := gcm.Open(nil, nonceBytes, cipherBytes, []byte(associatedData))
+	if err != nil {
+		return "", err
+	}
+
+	return string(plaintext), nil
 }
 
 // 同步回调
-func (p *WxpayPlugin) Return(tradeNo string) (plugin.ReturnResult, error) {
+func (p *WxpayPlugin) Return(tradeNo string, c *gin.Context) (plugin.ReturnResult, error) {
 	return plugin.ReturnResult{
 		Success: true,
 		TradeNo: tradeNo,
@@ -294,14 +585,46 @@ func (p *WxpayPlugin) OK(tradeNo string) (string, error) {
 func (p *WxpayPlugin) Refund(params map[string]interface{}) (plugin.RefundResult, error) {
 	tradeNo := params["trade_no"].(string)
 	money := params["money"].(float64)
+	channel := params["channel"].(model.Channel)
 
-	// TODO: 调用微信退款接口
+	client, err := p.getClient(channel)
+	if err != nil {
+		log.Printf("[wxpay_refund_failed] trade_no=%s, money=%.2f, reason=get client failed, error=%s", tradeNo, money, err.Error())
+		return plugin.RefundResult{Code: -1, ErrMsg: err.Error()}, err
+	}
 
+	order, err := p.getOrder(tradeNo)
+	if err != nil {
+		log.Printf("[wxpay_refund_failed] trade_no=%s, money=%.2f, reason=order not found, error=%s", tradeNo, money, err.Error())
+		return plugin.RefundResult{Code: -1, ErrMsg: "订单不存在"}, err
+	}
+
+	req := map[string]interface{}{
+		"transaction_id": order.ApiTradeNo,
+		"out_refund_no":  fmt.Sprintf("R%s", tradeNo),
+		"amount": map[string]interface{}{
+			"refund":  int(money * 100),
+			"total":   int(order.Realmoney * 100),
+			"currency": "CNY",
+		},
+	}
+
+	result, err := client.Post(context.Background(), "/v3/refund/domestic/refunds", req)
+	if err != nil {
+		log.Printf("[wxpay_refund_failed] trade_no=%s, money=%.2f, reason=http post failed, error=%s", tradeNo, money, err.Error())
+		return plugin.RefundResult{Code: -1, ErrMsg: err.Error()}, err
+	}
+
+	body, _ := io.ReadAll(result.Response.Body)
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	log.Printf("[wxpay_refund_success] trade_no=%s, money=%.2f", tradeNo, money)
 	return plugin.RefundResult{
-		Code:    0,
+		Code:  0,
 		TradeNo: tradeNo,
-		Fee:     money,
-		Time:    time.Now().Format("2006-01-02 15:04:05"),
+		Fee:   money,
+		Time:  time.Now().Format("2006-01-02 15:04:05"),
 	}, nil
 }
 
@@ -309,14 +632,51 @@ func (p *WxpayPlugin) Refund(params map[string]interface{}) (plugin.RefundResult
 func (p *WxpayPlugin) Transfer(params map[string]interface{}) (plugin.TransferResult, error) {
 	bizNo := params["biz_no"].(string)
 	account := params["account"].(string)
-	// name := params["name"].(string)
 	money := params["money"].(float64)
+	channel := params["channel"].(model.Channel)
 
-	// TODO: 调用微信企业付款接口
+	client, err := p.getClient(channel)
+	if err != nil {
+		log.Printf("[wxpay_transfer_failed] biz_no=%s, account=%s, money=%.2f, reason=get client failed, error=%s", bizNo, account, money, err.Error())
+		return plugin.TransferResult{Code: -1, ErrMsg: err.Error()}, err
+	}
 
+	cfg, _ := p.getConfig(channel)
+
+	req := map[string]interface{}{
+		"appid":      cfg.AppID,
+		"mchid":      cfg.MchID,
+		"out_batch_no": bizNo,
+		"batch_name": "商户转账",
+		"batch_reason": "商户转账",
+		"total_amount": int(money * 100),
+		"total_num":  1,
+		"transfer_detail_list": []map[string]interface{}{
+			{
+				"out_detail_no":    bizNo,
+				"transfer_amount":  int(money * 100),
+				"transfer_remark": "商户转账",
+				"openid":          account,
+			},
+		},
+	}
+
+	result, err := client.Post(context.Background(), "/v3/transfer/batches", req)
+	if err != nil {
+		log.Printf("[wxpay_transfer_failed] biz_no=%s, account=%s, money=%.2f, reason=http post failed, error=%s", bizNo, account, money, err.Error())
+		return plugin.TransferResult{Code: -1, ErrMsg: err.Error()}, err
+	}
+
+	body, _ := io.ReadAll(result.Response.Body)
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	batchId, _ := resp["batch_id"].(string)
+
+	log.Printf("[wxpay_transfer_success] biz_no=%s, batch_id=%s", bizNo, batchId)
 	return plugin.TransferResult{
 		Code:    0,
-		OrderID: bizNo,
+		OrderID: batchId,
 		PayDate: time.Now().Format("2006-01-02 15:04:05"),
 	}, nil
 }
@@ -324,13 +684,81 @@ func (p *WxpayPlugin) Transfer(params map[string]interface{}) (plugin.TransferRe
 // 转账查询
 func (p *WxpayPlugin) TransferQuery(params map[string]interface{}) (plugin.TransferQueryResult, error) {
 	bizNo := params["biz_no"].(string)
+	channel := params["channel"].(model.Channel)
 
-	// TODO: 调用微信企业付款查询接口
+	client, err := p.getClient(channel)
+	if err != nil {
+		log.Printf("[wxpay_transfer_query_failed] biz_no=%s, reason=get client failed, error=%s", bizNo, err.Error())
+		return plugin.TransferQueryResult{Code: -1, ErrMsg: err.Error()}, err
+	}
+
+	url := fmt.Sprintf("/v3/transfer/batches/out_batch_no/%s?need_query_detail=true", bizNo)
+	result, err := client.Get(context.Background(), url)
+	if err != nil {
+		log.Printf("[wxpay_transfer_query_failed] biz_no=%s, reason=http get failed, error=%s", bizNo, err.Error())
+		return plugin.TransferQueryResult{Code: -1, ErrMsg: err.Error()}, err
+	}
+
+	body, _ := io.ReadAll(result.Response.Body)
+	var resp map[string]interface{}
+	json.Unmarshal(body, &resp)
+
+	status := 0
+	switch resp["batch_status"] {
+	case "SUCCESS":
+		status = 1
+	case "FAIL":
+		status = 2
+	}
 
 	return plugin.TransferQueryResult{
 		Code:    0,
-		Status:  1,
-		Amount:  100.00,
-		PayDate: time.Now().Format("2006-01-02 15:04:05"),
+		Status:  status,
+		Amount:  0,
+		PayDate: "",
 	}, nil
+}
+
+// 辅助方法
+func (p *WxpayPlugin) getOrder(tradeNo string) (*model.Order, error) {
+	var order model.Order
+	if err := config.DB.Where("trade_no = ?", tradeNo).First(&order).Error; err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+// RSA 签名
+func (p *WxpayPlugin) sign(message, privateKey string) (string, error) {
+	block, _ := pem.Decode([]byte(privateKey))
+	if block == nil {
+		return "", fmt.Errorf("failed to decode private key")
+	}
+
+	privateKeyParsed, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+
+	h := sha256.New()
+	h.Write([]byte(message))
+
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKeyParsed, crypto.SHA256, h.Sum(nil))
+	if err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(signature), nil
+}
+
+// 生成随机字符串
+func (p *WxpayPlugin) generateNonceStr(length int) string {
+	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	result := make([]byte, length)
+	for i := range result {
+		randBytes := make([]byte, 1)
+		rand.Read(randBytes)
+		result[i] = chars[int(randBytes[0])%len(chars)]
+	}
+	return string(result)
 }

@@ -15,6 +15,12 @@ const routes: RouteRecordRaw[] = [
     name: 'Cashier',
     component: () => import('@/views/cashier/index.vue')
   },
+  // 管理员登录
+  {
+    path: '/admin/login',
+    name: 'AdminLogin',
+    component: () => import('@/views/admin/login.vue')
+  },
   // 管理后台
   {
     path: '/admin',
@@ -28,11 +34,6 @@ const routes: RouteRecordRaw[] = [
         path: 'index',
         name: 'AdminIndex',
         component: () => import('@/views/admin/index.vue')
-      },
-      {
-        path: 'login',
-        name: 'AdminLogin',
-        component: () => import('@/views/admin/login.vue')
       },
       {
         path: 'users',
@@ -71,6 +72,18 @@ const routes: RouteRecordRaw[] = [
       }
     ]
   },
+  // 商户登录
+  {
+    path: '/user/login',
+    name: 'UserLogin',
+    component: () => import('@/views/user/login.vue')
+  },
+  // 商户注册
+  {
+    path: '/user/register',
+    name: 'UserRegister',
+    component: () => import('@/views/user/register.vue')
+  },
   // 商户后台
   {
     path: '/user',
@@ -84,16 +97,6 @@ const routes: RouteRecordRaw[] = [
         path: 'index',
         name: 'UserIndex',
         component: () => import('@/views/user/index.vue')
-      },
-      {
-        path: 'login',
-        name: 'UserLogin',
-        component: () => import('@/views/user/login.vue')
-      },
-      {
-        path: 'register',
-        name: 'UserRegister',
-        component: () => import('@/views/user/register.vue')
       },
       {
         path: 'orders',
@@ -125,7 +128,7 @@ const router = createRouter({
 })
 
 // 导航守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const appStore = useAppStore()
 
   // 如果访问 /admin 开头但不是登录页，需要检查登录状态

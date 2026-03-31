@@ -1,3 +1,39 @@
+<template>
+  <div>
+    <h2 class="text-2xl font-bold text-gray-800 mb-6">资金记录</h2>
+
+    <div class="card">
+      <div class="card-body">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>类型</th>
+              <th>金额</th>
+              <th>余额</th>
+              <th>关联订单</th>
+              <th>时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in records" :key="r.id">
+              <td>{{ actionMap[r.action] || '未知' }}</td>
+              <td :class="r.money >= 0 ? 'text-success' : 'text-danger'">
+                {{ r.money >= 0 ? '+' : '' }}{{ r.money }}
+              </td>
+              <td>¥{{ r.newmoney }}</td>
+              <td>{{ r.trade_no || '-' }}</td>
+              <td>{{ dayjs(r.date).format('YYYY-MM-DD HH:mm') }}</td>
+            </tr>
+            <tr v-if="records.length === 0">
+              <td colspan="5" class="text-center text-gray-500 py-8">暂无资金记录</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getUserRecords } from '@/api/user'
@@ -36,39 +72,3 @@ onMounted(() => {
   fetchRecords()
 })
 </script>
-
-<template>
-  <div>
-    <h2 class="text-2xl font-bold text-gray-800 mb-6">资金记录</h2>
-
-    <div class="card">
-      <div class="card-body">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>类型</th>
-              <th>金额</th>
-              <th>余额</th>
-              <th>关联订单</th>
-              <th>时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in records" :key="r.id">
-              <td>{{ actionMap[r.action] || '未知' }}</td>
-              <td :class="r.money >= 0 ? 'text-success' : 'text-danger'">
-                {{ r.money >= 0 ? '+' : '' }}{{ r.money }}
-              </td>
-              <td>¥{{ r.newmoney }}</td>
-              <td>{{ r.trade_no || '-' }}</td>
-              <td>{{ dayjs(r.date).format('YYYY-MM-DD HH:mm') }}</td>
-            </tr>
-            <tr v-if="records.length === 0">
-              <td colspan="5" class="text-center text-gray-500 py-8">暂无资金记录</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</template>

@@ -1,40 +1,3 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { userLogin } from '@/api/user'
-import { useAppStore } from '@/stores/app'
-
-const router = useRouter()
-const appStore = useAppStore()
-
-const form = ref({
-  uid: '',
-  password: '',
-  key: ''
-})
-const loginType = ref('password')
-const loading = ref(false)
-
-async function handleLogin() {
-  loading.value = true
-  try {
-    const data = loginType.value === 'password'
-      ? { uid: parseInt(form.value.uid), password: form.value.password }
-      : { uid: parseInt(form.value.uid), key: form.value.key }
-
-    const res = await userLogin(data)
-    if (res.code === 0) {
-      appStore.userLogin(res.token, res.data)
-      router.push('/user/index')
-    }
-  } catch (error) {
-    console.error('登录失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
-</script>
-
 <template>
   <div class="min-h-screen bg-gray-100 flex items-center justify-center">
     <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
@@ -89,3 +52,40 @@ async function handleLogin() {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { userLogin } from '@/api/user'
+import { useAppStore } from '@/stores/app'
+
+const router = useRouter()
+const appStore = useAppStore()
+
+const form = ref({
+  uid: '',
+  password: '',
+  key: ''
+})
+const loginType = ref('password')
+const loading = ref(false)
+
+async function handleLogin() {
+  loading.value = true
+  try {
+    const data = loginType.value === 'password'
+      ? { uid: parseInt(form.value.uid), password: form.value.password }
+      : { uid: parseInt(form.value.uid), key: form.value.key }
+
+    const res = await userLogin(data)
+    if (res.code === 0 && res.token) {
+      appStore.userLogin(res.token, res.data)
+      router.push('/user/index')
+    }
+  } catch (error) {
+    console.error('登录失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+</script>

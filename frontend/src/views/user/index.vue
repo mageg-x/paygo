@@ -1,26 +1,7 @@
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-
-const stats = ref({
-  today_money: 0,
-  today_count: 0,
-  total_money: 0,
-  total_count: 0,
-  settle_money: 0
-})
-
-const recentOrders = ref<any[]>([])
-
-onMounted(async () => {
-  // TODO: 获取商户首页数据
-})
-</script>
-
 <template>
   <div>
     <h2 class="text-2xl font-bold text-gray-800 mb-6">商户中心</h2>
 
-    <!-- 统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
       <div class="card p-6">
         <div class="text-gray-500 text-sm mb-2">今日收入</div>
@@ -40,7 +21,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 快捷操作 -->
     <div class="card mb-6">
       <div class="card-header">
         <h3 class="font-medium text-gray-800">快捷操作</h3>
@@ -63,7 +43,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 最新订单 -->
     <div class="card">
       <div class="card-header">
         <h3 class="font-medium text-gray-800">最新订单</h3>
@@ -100,3 +79,20 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+
+const stats = ref({
+  today_money: 0,
+  today_count: 0,
+  total_money: 0,
+  total_count: 0,
+  settle_money: 0
+})
+
+const recentOrders = ref<any[]>([])
+
+onMounted(async () => {
+})
+</script>

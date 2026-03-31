@@ -2,6 +2,8 @@ package plugin
 
 import (
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 // 插件接口
@@ -16,10 +18,10 @@ type Plugin interface {
 	Mapi(params map[string]interface{}) (SubmitResult, error)
 
 	// 异步回调
-	Notify(tradeNo string) (NotifyResult, error)
+	Notify(tradeNo string, c *gin.Context) (NotifyResult, error)
 
 	// 同步回调
-	Return(tradeNo string) (ReturnResult, error)
+	Return(tradeNo string, c *gin.Context) (ReturnResult, error)
 
 	// 支付成功页面
 	OK(tradeNo string) (string, error)
@@ -36,15 +38,15 @@ type Plugin interface {
 
 // 插件信息
 type PluginInfo struct {
-	Name       string   // 插件名称
-	Showname   string   // 显示名称
-	Author     string   // 作者
-	Link       string   // 链接
-	Types      []string // 支持的支付类型
-	Transtypes []string // 支持的转账类型
+	Name       string                 // 插件名称
+	Showname   string                 // 显示名称
+	Author     string                 // 作者
+	Link       string                 // 链接
+	Types      []string               // 支持的支付类型
+	Transtypes []string               // 支持的转账类型
 	Inputs     map[string]InputConfig // 配置项
-	Select     map[string]string     // 支付方式选择
-	Note       string                // 说明
+	Select     map[string]string      // 支付方式选择
+	Note       string                 // 说明
 }
 
 // 输入配置
@@ -84,13 +86,13 @@ type ReturnResult struct {
 
 // 退款结果
 type RefundResult struct {
-	Code     int     // 0成功, -1失败
-	TradeNo  string  // 订单号
-	Fee      float64 // 退款金额
-	Time     string  // 退款时间
-	Buyer    string  // 买家
-	ErrCode  string  // 错误码
-	ErrMsg   string  // 错误信息
+	Code    int     // 0成功, -1失败
+	TradeNo string  // 订单号
+	Fee     float64 // 退款金额
+	Time    string  // 退款时间
+	Buyer   string  // 买家
+	ErrCode string  // 错误码
+	ErrMsg  string  // 错误信息
 }
 
 // 转账结果

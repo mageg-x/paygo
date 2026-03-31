@@ -1,9 +1,10 @@
 module paygo
 
-go 1.24
+go 1.24.2
 
 require (
 	github.com/gin-gonic/gin v1.9.1
+	github.com/wechatpay-apiv3/wechatpay-go v0.2.21
 	gorm.io/driver/sqlite v1.5.4
 	gorm.io/gorm v1.25.5
 )

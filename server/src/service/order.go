@@ -4,7 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"paygo/src/config"
@@ -36,14 +41,17 @@ func (s *OrderService) CreateOrder(uid uint, outTradeNo, name, notifyURL, return
 	// 获取商户信息
 	user, err := s.authSvc.GetUser(uid)
 	if err != nil {
+		log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, reason=merchant not found, error=%s", uid, outTradeNo, err.Error())
 		return nil, errors.New("商户不存在")
 	}
 
 	if user.Status != 0 {
+		log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, reason=merchant disabled, status=%d", uid, outTradeNo, user.Status)
 		return nil, errors.New("商户已被禁用")
 	}
 
 	if user.Pay != 1 {
+		log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, reason=merchant no pay permission")
 		return nil, errors.New("商户没有支付权限")
 	}
 
@@ -51,10 +59,12 @@ func (s *OrderService) CreateOrder(uid uint, outTradeNo, name, notifyURL, return
 	var channel model.Channel
 	result := config.DB.First(&channel, channelID)
 	if result.Error != nil {
+		log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, channel_id=%d, reason=channel not found, error=%s", uid, outTradeNo, channelID, result.Error.Error())
 		return nil, errors.New("通道不存在")
 	}
 
 	if channel.Status != 1 {
+		log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, channel_id=%d, reason=channel disabled", uid, outTradeNo, channelID)
 		return nil, errors.New("通道已关闭")
 	}
 
@@ -62,12 +72,14 @@ func (s *OrderService) CreateOrder(uid uint, outTradeNo, name, notifyURL, return
 	if channel.Paymin != "" {
 		minMoney, _ := strconv.ParseFloat(channel.Paymin, 10)
 		if money < minMoney {
+			log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, money=%.2f, min_money=%.2f, reason=below minimum amount", uid, outTradeNo, money, minMoney)
 			return nil, fmt.Errorf("最低支付金额%.2f", minMoney)
 		}
 	}
 	if channel.Paymax != "" {
 		maxMoney, _ := strconv.ParseFloat(channel.Paymax, 10)
 		if money > maxMoney {
+			log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, money=%.2f, max_money=%.2f, reason=exceeds maximum amount", uid, outTradeNo, money, maxMoney)
 			return nil, fmt.Errorf("最高支付金额%.2f", maxMoney)
 		}
 	}
@@ -81,7 +93,7 @@ func (s *OrderService) CreateOrder(uid uint, outTradeNo, name, notifyURL, return
 	rate := channel.Rate
 	if user.Mode == 1 {
 		// 加费模式
-		rate = rate + (100 - rate) * 0.5
+		rate = rate + (100-rate)*0.5
 	} else if user.Mode == 2 {
 		// 减费模式
 		rate = rate * 0.5
@@ -126,6 +138,7 @@ func (s *OrderService) CreateOrder(uid uint, outTradeNo, name, notifyURL, return
 
 	result = config.DB.Create(order)
 	if result.Error != nil {
+		log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, reason=create order failed, error=%s", uid, outTradeNo, result.Error.Error())
 		return nil, errors.New("创建订单失败")
 	}
 
@@ -137,22 +150,187 @@ func (s *OrderService) OrderPaid(tradeNo, apiTradeNo, buyer string) error {
 	var order model.Order
 	result := config.DB.Where("trade_no = ? AND status = ?", tradeNo, model.OrderStatusPending).First(&order)
 	if result.Error != nil {
+		log.Printf("[order_paid_failed] trade_no=%s, reason=order not found or already processed, error=%s", tradeNo, result.Error.Error())
 		return errors.New("订单不存在或已处理")
 	}
 
 	// 更新订单状态
 	now := time.Now()
 	config.DB.Model(&order).Updates(map[string]interface{}{
-		"status":      model.OrderStatusPaid,
+		"status":       model.OrderStatusPaid,
 		"api_trade_no": apiTradeNo,
 		"buyer":        buyer,
 		"endtime":      now,
 		"notifytime":   now,
 	})
 
-	// 给商户加款
+	// 根据订单类型处理
+	switch order.Tid {
+	case 1:
+		// 商户注册 - 给推荐人返现
+		s.handleUserRegister(order, now)
+	case 2:
+		// 充值余额
+		s.handleRecharge(order, now)
+	case 3:
+		// 聚合收款
+		s.handleCombinePayment(order, now)
+	case 4:
+		// 购买用户组
+		s.handleBuyGroup(order, now)
+	default:
+		// 普通订单 - 增加余额
+		s.handleNormalOrder(order, now)
+	}
+
+	// 邀请人奖励（非充值订单）
+	if order.Invite > 0 && order.Tid != 2 {
+		s.addInviteMoney(order.Invite, order.UID, order.Money, tradeNo)
+	}
+
+	// 执行分账（异步）
+	go s.executeProfitSharing(tradeNo)
+
+	// 通知商户（异步）
+	go s.notifyMerchant(order)
+
+	return nil
+}
+
+// 执行分账
+func (s *OrderService) executeProfitSharing(tradeNo string) {
+	profitSvc := NewProfitService()
+	if err := profitSvc.ProcessProfitSharing(tradeNo); err != nil {
+		log.Printf("[execute_profit_sharing_error] trade_no=%s, error=%s", tradeNo, err.Error())
+	}
+}
+
+// 处理商户注册订单 (tid=1)
+func (s *OrderService) handleUserRegister(order model.Order, now time.Time) {
 	var user model.User
-	config.DB.First(&user, order.UID)
+	if config.DB.First(&user, order.UID).Error != nil {
+		return
+	}
+
+	// 商户注册成功，给推荐人返现
+	if order.Invite > 0 {
+		s.addInviteMoney(order.Invite, order.UID, order.Money, order.TradeNo)
+	}
+
+	log.Printf("[order_paid_success] trade_no=%s, tid=1, uid=%d, type=user_register", order.TradeNo, order.UID)
+}
+
+// 处理充值订单 (tid=2)
+func (s *OrderService) handleRecharge(order model.Order, now time.Time) {
+	var user model.User
+	if config.DB.First(&user, order.UID).Error != nil {
+		return
+	}
+
+	oldMoney := user.Money
+	newMoney := oldMoney + order.Money
+
+	config.DB.Model(&user).Update("money", newMoney)
+
+	// 记录资金变动
+	record := &model.Record{
+		UID:      order.UID,
+		Action:   2, // 充值
+		Money:    order.Money,
+		Oldmoney: oldMoney,
+		Newmoney: newMoney,
+		Type:     "recharge",
+		TradeNo:  order.TradeNo,
+		Date:     now,
+	}
+	config.DB.Create(record)
+
+	log.Printf("[order_paid_success] trade_no=%s, tid=2, uid=%d, money=%.2f", order.TradeNo, order.UID, order.Money)
+}
+
+// 处理聚合收款订单 (tid=3)
+func (s *OrderService) handleCombinePayment(order model.Order, now time.Time) {
+	var user model.User
+	if config.DB.First(&user, order.UID).Error != nil {
+		return
+	}
+
+	oldMoney := user.Money
+	newMoney := oldMoney + order.Getmoney
+
+	config.DB.Model(&user).Update("money", newMoney)
+
+	// 记录资金变动
+	record := &model.Record{
+		UID:      order.UID,
+		Action:   1, // 订单收入
+		Money:    order.Getmoney,
+		Oldmoney: oldMoney,
+		Newmoney: newMoney,
+		Type:     "combine",
+		TradeNo:  order.TradeNo,
+		Date:     now,
+	}
+	config.DB.Create(record)
+
+	log.Printf("[order_paid_success] trade_no=%s, tid=3, uid=%d, money=%.2f, getmoney=%.2f", order.TradeNo, order.UID, order.Money, order.Getmoney)
+}
+
+// 处理购买用户组订单 (tid=4)
+func (s *OrderService) handleBuyGroup(order model.Order, now time.Time) {
+	var user model.User
+	if config.DB.First(&user, order.UID).Error != nil {
+		return
+	}
+
+	// 从订单参数中解析目标用户组
+	// param 格式: gid|days 或直接是 gid
+	var newGID uint = 1
+	var days int = 0
+
+	if order.Param != "" {
+		parts := strings.Split(order.Param, "|")
+		if len(parts) >= 1 {
+			gid, _ := strconv.ParseUint(parts[0], 10, 32)
+			newGID = uint(gid)
+		}
+		if len(parts) >= 2 {
+			days, _ = strconv.Atoi(parts[1])
+		}
+	}
+
+	oldMoney := user.Money
+	oldGID := user.GID
+
+	// 扣除购买费用
+	newMoney := oldMoney - order.Money
+	config.DB.Model(&user).Updates(map[string]interface{}{
+		"money": newMoney,
+		"gid":   newGID,
+	})
+
+	// 记录资金变动
+	record := &model.Record{
+		UID:      order.UID,
+		Action:   5, // 购买用户组
+		Money:    -order.Money,
+		Oldmoney: oldMoney,
+		Newmoney: newMoney,
+		Type:     "buygroup",
+		TradeNo:  order.TradeNo,
+		Date:     now,
+	}
+	config.DB.Create(record)
+
+	log.Printf("[order_paid_success] trade_no=%s, tid=4, uid=%d, old_gid=%d, new_gid=%d, days=%d", order.TradeNo, order.UID, oldGID, newGID, days)
+}
+
+// 处理普通订单 (tid=0或其他)
+func (s *OrderService) handleNormalOrder(order model.Order, now time.Time) {
+	var user model.User
+	if config.DB.First(&user, order.UID).Error != nil {
+		return
+	}
 
 	oldMoney := user.Money
 	newMoney := oldMoney + order.Getmoney
@@ -167,20 +345,12 @@ func (s *OrderService) OrderPaid(tradeNo, apiTradeNo, buyer string) error {
 		Oldmoney: oldMoney,
 		Newmoney: newMoney,
 		Type:     "order",
-		TradeNo:  tradeNo,
+		TradeNo:  order.TradeNo,
 		Date:     now,
 	}
 	config.DB.Create(record)
 
-	// 邀请人奖励
-	if order.Invite > 0 {
-		s.addInviteMoney(order.Invite, order.UID, order.Money, tradeNo)
-	}
-
-	// 通知商户
-	go s.notifyMerchant(order)
-
-	return nil
+	log.Printf("[order_paid_success] trade_no=%s, tid=%d, uid=%d, money=%.2f, getmoney=%.2f", order.TradeNo, order.Tid, order.UID, order.Money, order.Getmoney)
 }
 
 // 添加邀请奖励
@@ -231,26 +401,68 @@ func (s *OrderService) addInviteMoney(inviteUID, uid uint, money float64, tradeN
 // 通知商户
 func (s *OrderService) notifyMerchant(order model.Order) {
 	if order.NotifyURL == "" {
+		log.Printf("[notify_merchant_skipped] trade_no=%s, reason=empty notify_url", order.TradeNo)
 		return
 	}
 
-	// TODO: 发送HTTP通知
 	// 构造通知数据
 	params := map[string]string{
 		"trade_no":     order.TradeNo,
 		"out_trade_no": order.OutTradeNo,
 		"type":         strconv.Itoa(order.Type),
 		"status":       "1",
+		"money":        strconv.FormatFloat(order.Money, 'f', 2, 64),
+		"realmoney":    strconv.FormatFloat(order.Realmoney, 'f', 2, 64),
 	}
 
 	// 获取商户密钥进行签名
 	var user model.User
-	config.DB.First(&user, order.UID)
+	if config.DB.First(&user, order.UID).Error != nil {
+		log.Printf("[notify_merchant_failed] trade_no=%s, reason=user not found", order.TradeNo)
+		return
+	}
 
 	params["sign"] = s.authSvc.MakeSign(params, user.Key)
 
-	// 发送通知
-	// http.PostForm(order.NotifyURL, params)
+	// 发送HTTP POST通知
+	formData := url.Values{}
+	for k, v := range params {
+		formData.Set(k, v)
+	}
+	resp, err := http.PostForm(order.NotifyURL, formData)
+	if err != nil {
+		log.Printf("[notify_merchant_failed] trade_no=%s, url=%s, error=%s", order.TradeNo, order.NotifyURL, err.Error())
+		// 记录失败，后续重试
+		s.markNotifyFailed(order.TradeNo)
+		return
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, _ := io.ReadAll(resp.Body)
+	result := string(body)
+
+	// 检查是否成功（需返回 success 或 SUCCESS）
+	if strings.Contains(result, "success") || strings.Contains(result, "SUCCESS") {
+		log.Printf("[notify_merchant_success] trade_no=%s, url=%s", order.TradeNo, order.NotifyURL)
+		s.markNotifySuccess(order.TradeNo)
+	} else {
+		log.Printf("[notify_merchant_failed] trade_no=%s, url=%s, response=%s", order.TradeNo, order.NotifyURL, result)
+		s.markNotifyFailed(order.TradeNo)
+	}
+}
+
+// 标记通知成功
+func (s *OrderService) markNotifySuccess(tradeNo string) {
+	config.DB.Model(&model.Order{}).Where("trade_no = ?", tradeNo).Updates(map[string]interface{}{
+		"notify":      1,
+		"notifytime":  time.Now(),
+	})
+}
+
+// 标记通知失败
+func (s *OrderService) markNotifyFailed(tradeNo string) {
+	config.DB.Model(&model.Order{}).Where("trade_no = ?", tradeNo).Update("notify", 2)
 }
 
 // 订单退款
@@ -258,57 +470,116 @@ func (s *OrderService) Refund(tradeNo string, money float64) error {
 	var order model.Order
 	result := config.DB.Where("trade_no = ?", tradeNo).First(&order)
 	if result.Error != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=order not found, error=%s", tradeNo, money, result.Error.Error())
 		return errors.New("订单不存在")
 	}
 
 	if order.Status != model.OrderStatusPaid {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=invalid order status, status=%d", tradeNo, money, order.Status)
 		return errors.New("订单状态不允许退款")
 	}
 
-	if order.Refundmoney+money > order.Getmoney {
-		return errors.New("退款金额超过可退金额")
+	// 退款金额不能超过订单金额
+	if order.Refundmoney+money > order.Money {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=refund amount exceeds total, refundmoney=%.2f, total=%.2f", tradeNo, money, order.Refundmoney, order.Money)
+		return errors.New("退款金额超过订单金额")
 	}
 
-	// 扣除商户余额
+	// 获取商户
 	var user model.User
 	config.DB.First(&user, order.UID)
 
-	if user.Money < money {
-		return errors.New("商户余额不足")
-	}
-
+	// 扣除商户余额（普通订单和充值订单处理不同）
 	oldMoney := user.Money
-	newMoney := oldMoney - money
+	var newMoney float64
 
 	tx := config.DB.Begin()
 
-	// 扣除余额
-	tx.Model(&user).Update("money", newMoney)
+	// 充值订单退款：原路退回，不从余额扣除
+	// 普通订单退款：从商户可得金额中扣除
+	if order.Tid == 2 {
+		// 充值订单退款
+		refundmoney := order.Refundmoney + money
+		tx.Model(&order).Update("refundmoney", refundmoney)
 
-	// 更新退款金额
-	refundmoney := order.Refundmoney + money
-	tx.Model(&order).Update("refundmoney", refundmoney)
+		// 如果完全退款，更新状态
+		if refundmoney >= order.Money {
+			tx.Model(&order).Update("status", model.OrderStatusRefunded)
+		}
 
-	// 如果完全退款，更新状态
-	if refundmoney >= order.Getmoney {
-		tx.Model(&order).Update("status", model.OrderStatusRefunded)
+		// 记录资金变动（退还充值）
+		record := &model.Record{
+			UID:      order.UID,
+			Action:   8, // 充值退款
+			Money:    -money,
+			Oldmoney: oldMoney,
+			Newmoney: oldMoney, // 余额不变，因为是原路退回
+			Type:     "refund",
+			TradeNo:  tradeNo,
+			Date:     time.Now(),
+		}
+		tx.Create(record)
+	} else {
+		// 普通订单退款：从商户可得金额扣除
+		availableRefund := order.Getmoney - order.Refundmoney
+		if money > availableRefund {
+			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=refund exceeds available getmoney, available=%.2f", tradeNo, money, availableRefund)
+			tx.Rollback()
+			return errors.New("退款金额超过可退金额")
+		}
+
+		if user.Money < money {
+			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=insufficient balance, balance=%.2f", tradeNo, money, user.Money)
+			tx.Rollback()
+			return errors.New("商户余额不足")
+		}
+
+		newMoney = oldMoney - money
+
+		// 扣除余额
+		tx.Model(&user).Update("money", newMoney)
+
+		// 更新退款金额
+		refundmoney := order.Refundmoney + money
+		tx.Model(&order).Update("refundmoney", refundmoney)
+
+		// 如果完全退款，更新状态
+		if refundmoney >= order.Getmoney {
+			tx.Model(&order).Update("status", model.OrderStatusRefunded)
+		}
+
+		// 记录资金变动
+		record := &model.Record{
+			UID:      order.UID,
+			Action:   4, // 退款
+			Money:    -money,
+			Oldmoney: oldMoney,
+			Newmoney: newMoney,
+			Type:     "refund",
+			TradeNo:  tradeNo,
+			Date:     time.Now(),
+		}
+		tx.Create(record)
 	}
 
-	// 记录资金变动
-	record := &model.Record{
-		UID:      order.UID,
-		Action:   4, // 退款
-		Money:    -money,
-		Oldmoney: oldMoney,
-		Newmoney: newMoney,
-		Type:     "refund",
-		TradeNo:  tradeNo,
-		Date:     time.Now(),
+	// 创建退款订单记录
+	refundNo := fmt.Sprintf("R%s", tradeNo)
+	refundOrder := &model.RefundOrder{
+		RefundNo:    refundNo,
+		OutRefundNo: fmt.Sprintf("R%s_%d", tradeNo, int(time.Now().Unix())),
+		TradeNo:     tradeNo,
+		UID:         order.UID,
+		Money:       money,
+		Reducemoney: 0,
+		Status:      1, // 退款成功
+		Addtime:     time.Now(),
+		Endtime:     time.Now(),
 	}
-	tx.Create(record)
+	tx.Create(refundOrder)
 
 	tx.Commit()
 
+	log.Printf("[refund_success] trade_no=%s, money=%.2f, refund_no=%s", tradeNo, money, refundNo)
 	return nil
 }
 
@@ -329,6 +600,7 @@ func (s *OrderService) GetOrder(tradeNo string) (*model.Order, error) {
 	var order model.Order
 	result := config.DB.Where("trade_no = ?", tradeNo).First(&order)
 	if result.Error != nil {
+		log.Printf("[get_order_failed] trade_no=%s, reason=order not found, error=%s", tradeNo, result.Error.Error())
 		return nil, errors.New("订单不存在")
 	}
 	return &order, nil
@@ -339,6 +611,7 @@ func (s *OrderService) GetOrderByOutTradeNo(outTradeNo string, uid uint) (*model
 	var order model.Order
 	result := config.DB.Where("out_trade_no = ? AND uid = ?", outTradeNo, uid).First(&order)
 	if result.Error != nil {
+		log.Printf("[get_order_failed] out_trade_no=%s, uid=%d, reason=order not found, error=%s", outTradeNo, uid, result.Error.Error())
 		return nil, errors.New("订单不存在")
 	}
 	return &order, nil
@@ -392,9 +665,9 @@ func (s *OrderService) CleanTimeoutOrders() (int64, error) {
 // 获取订单统计
 func (s *OrderService) GetOrderStats(uid uint, startDate, endDate string) (map[string]interface{}, error) {
 	type Stats struct {
-		Total   float64
-		Count   int64
-		Today   float64
+		Total      float64
+		Count      int64
+		Today      float64
 		TodayCount int64
 	}
 
@@ -414,10 +687,10 @@ func (s *OrderService) GetOrderStats(uid uint, startDate, endDate string) (map[s
 	config.DB.Model(&model.Order{}).Where("uid = ? AND status = ? AND date = ?", uid, model.OrderStatusPaid, today).Count(&todayCount)
 
 	return map[string]interface{}{
-		"total_money":    totalMoney,
-		"total_count":    totalCount,
-		"today_money":    todayMoney,
-		"today_count":    todayCount,
+		"total_money": totalMoney,
+		"total_count": totalCount,
+		"today_money": todayMoney,
+		"today_count": todayCount,
 	}, nil
 }
 
@@ -443,6 +716,7 @@ func (s *OrderService) CheckDomainAuth(uid uint, domain string) bool {
 func (s *OrderService) GetOrderDetail(tradeNo string) (map[string]interface{}, error) {
 	var order model.Order
 	if config.DB.First(&order, tradeNo).Error != nil {
+		log.Printf("[get_order_detail_failed] trade_no=%s, reason=order not found", tradeNo)
 		return nil, errors.New("订单不存在")
 	}
 
@@ -459,10 +733,10 @@ func (s *OrderService) GetOrderDetail(tradeNo string) (map[string]interface{}, e
 	config.DB.First(&payType, order.Type)
 
 	detail := map[string]interface{}{
-		"order":       order,
-		"user":        user.Username,
-		"channel":     channel.Name,
-		"typename":   payType.Showname,
+		"order":    order,
+		"user":     user.Username,
+		"channel":  channel.Name,
+		"typename": payType.Showname,
 	}
 
 	return detail, nil

@@ -1,30 +1,3 @@
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getUserSettles } from '@/api/user'
-import dayjs from 'dayjs'
-
-const settles = ref<any[]>([])
-const loading = ref(false)
-
-async function fetchSettles() {
-  loading.value = true
-  try {
-    const res = await getUserSettles({ page: 1, limit: 20 })
-    if (res.code === 0) {
-      settles.value = res.data || []
-    }
-  } catch (error) {
-    console.error('获取结算记录失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchSettles()
-})
-</script>
-
 <template>
   <div>
     <h2 class="text-2xl font-bold text-gray-800 mb-6">结算记录</h2>
@@ -64,3 +37,30 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { getUserSettles } from '@/api/user'
+import dayjs from 'dayjs'
+
+const settles = ref<any[]>([])
+const loading = ref(false)
+
+async function fetchSettles() {
+  loading.value = true
+  try {
+    const res = await getUserSettles({ page: 1, limit: 20 })
+    if (res.code === 0) {
+      settles.value = res.data || []
+    }
+  } catch (error) {
+    console.error('获取结算记录失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchSettles()
+})
+</script>

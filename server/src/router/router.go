@@ -60,7 +60,11 @@ func SetupRouter() *gin.Engine {
 		adminAuth.Use(middleware.AdminAuth())
 		{
 			adminAuth.POST("/logout", adminHandler.Logout)
+			adminAuth.GET("/users", adminHandler.AjaxUserList)
 			adminAuth.POST("/user/op", adminHandler.AjaxUserOp)
+			adminAuth.POST("/user/add", adminHandler.AddUser)
+			adminAuth.POST("/user/update", adminHandler.UpdateUser)
+			adminAuth.GET("/user/edit", adminHandler.EditUserPage)
 			adminAuth.POST("/order/op", adminHandler.AjaxOrderOp)
 			adminAuth.POST("/order/list", adminHandler.AjaxOrderList)
 			adminAuth.POST("/settle/op", adminHandler.AjaxSettleOp)

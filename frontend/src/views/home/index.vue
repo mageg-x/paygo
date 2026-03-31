@@ -1,67 +1,11 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-
-const loading = ref(false)
-const form = ref({
-  pid: '',
-  type: '1',
-  out_trade_no: '',
-  name: '',
-  money: '',
-  notify_url: '',
-  return_url: ''
-})
-
-const payTypes = [
-  { id: 1, name: '支付宝', icon: 'alipay' },
-  { id: 2, name: '微信支付', icon: 'wechat' },
-]
-
-async function handleSubmit() {
-  if (!form.value.pid || !form.value.out_trade_no || !form.value.money) {
-    alert('请填写必填项')
-    return
-  }
-
-  loading.value = true
-
-  try {
-    const res = await fetch('/api/pay/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        ...form.value,
-        money: form.value.money
-      })
-    })
-    const data = await res.json()
-
-    if (data.code === 0) {
-      // 跳转到支付
-      if (data.result.type === 'jump' && data.result.url) {
-        window.location.href = data.result.url
-      }
-    } else {
-      alert(data.msg)
-    }
-  } catch (error) {
-    alert('请求失败')
-  } finally {
-    loading.value = false
-  }
-}
-</script>
-
 <template>
   <div class="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
     <div class="container mx-auto px-4 py-16">
-      <!-- Logo区域 -->
       <div class="text-center mb-12">
         <h1 class="text-4xl font-bold text-white mb-4">彩虹易支付</h1>
         <p class="text-blue-100">安全、快捷、稳定的聚合支付平台</p>
       </div>
 
-      <!-- 支付表单 -->
       <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-8">
         <h2 class="text-2xl font-bold text-gray-800 mb-6">发起支付</h2>
 
@@ -126,10 +70,62 @@ async function handleSubmit() {
         </form>
       </div>
 
-      <!-- 底部信息 -->
       <div class="text-center mt-8 text-blue-100">
         <p>API文档 | 商户后台 | 联系我们</p>
       </div>
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const loading = ref(false)
+const form = ref({
+  pid: '',
+  type: '1',
+  out_trade_no: '',
+  name: '',
+  money: '',
+  notify_url: '',
+  return_url: ''
+})
+
+const payTypes = [
+  { id: 1, name: '支付宝', icon: 'alipay' },
+  { id: 2, name: '微信支付', icon: 'wechat' },
+]
+
+async function handleSubmit() {
+  if (!form.value.pid || !form.value.out_trade_no || !form.value.money) {
+    alert('请填写必填项')
+    return
+  }
+
+  loading.value = true
+
+  try {
+    const res = await fetch('/api/pay/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        ...form.value,
+        money: form.value.money
+      })
+    })
+    const data = await res.json()
+
+    if (data.code === 0) {
+      if (data.result.type === 'jump' && data.result.url) {
+        window.location.href = data.result.url
+      }
+    } else {
+      alert(data.msg)
+    }
+  } catch (error) {
+    alert('请求失败')
+  } finally {
+    loading.value = false
+  }
+}
+</script>

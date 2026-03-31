@@ -1,21 +1,3 @@
-<script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-
-const router = useRouter()
-const route = useRoute()
-
-const menus = [
-  { path: '/user/index', name: '商户中心', icon: 'home' },
-  { path: '/user/orders', name: '订单管理', icon: 'list' },
-  { path: '/user/settles', name: '结算管理', icon: 'wallet' },
-  { path: '/user/records', name: '资金记录', icon: 'credit-card' },
-  { path: '/user/profile', name: '资料管理', icon: 'user' }
-]
-
-const activeMenu = computed(() => route.path)
-</script>
-
 <template>
   <div class="min-h-screen bg-gray-100">
     <!-- 顶部导航 -->
@@ -23,8 +5,8 @@ const activeMenu = computed(() => route.path)
       <div class="flex items-center justify-between px-6 py-3">
         <h1 class="text-xl font-bold text-gray-800">商户后台</h1>
         <div class="flex items-center gap-4">
-          <span class="text-gray-600">UID: 1001</span>
-          <button class="text-gray-500 hover:text-gray-700">退出</button>
+          <span class="text-gray-600">UID: {{ appStore.userInfo?.uid || '-' }}</span>
+          <button @click="handleLogout" class="text-gray-500 hover:text-gray-700">退出</button>
         </div>
       </div>
     </header>
@@ -56,3 +38,36 @@ const activeMenu = computed(() => route.path)
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { userLogout } from '@/api/user'
+import { useAppStore } from '@/stores/app'
+
+const router = useRouter()
+const route = useRoute()
+const appStore = useAppStore()
+
+const menus = [
+  { path: '/user/index', name: '商户中心', icon: 'home' },
+  { path: '/user/orders', name: '订单管理', icon: 'list' },
+  { path: '/user/settles', name: '结算管理', icon: 'wallet' },
+  { path: '/user/records', name: '资金记录', icon: 'credit-card' },
+  { path: '/user/profile', name: '资料管理', icon: 'user' }
+]
+
+const activeMenu = computed(() => route.path)
+
+async function handleLogout() {
+  try {
+    await userLogout()
+    appStore.userLogout()
+    router.push('/user/login')
+  } catch (error) {
+    console.error('logout failed:', error)
+    appStore.userLogout()
+    router.push('/user/login')
+  }
+}
+</script>

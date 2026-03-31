@@ -94,11 +94,11 @@ body {
 }
 
 .table th {
-  @apply px-4 py-3 text-left font-medium text-gray-600 bg-gray-50 border-b;
+  @apply px-4 py-3 text-center font-medium text-gray-600 bg-gray-50 border-b align-middle;
 }
 
 .table td {
-  @apply px-4 py-3 border-b border-gray-100;
+  @apply px-4 py-3 text-center border-b border-gray-100 align-middle;
 }
 
 .table tr:hover td {

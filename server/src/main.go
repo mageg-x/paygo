@@ -35,11 +35,6 @@ func main() {
 		log.Fatalf("创建数据目录失败: %v", err)
 	}
 
-	// 确保静态文件和模板目录存在
-	os.MkdirAll("../static", 0755)
-	os.MkdirAll("../templates", 0755)
-	os.MkdirAll("../assets", 0755)
-
 	// 设置路由
 	r := router.SetupRouter()
 

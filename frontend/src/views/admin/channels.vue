@@ -1,29 +1,3 @@
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getChannelList } from '@/api/admin'
-
-const channels = ref<any[]>([])
-const loading = ref(false)
-
-async function fetchChannels() {
-  loading.value = true
-  try {
-    const res = await getChannelList()
-    if (res.code === 0) {
-      channels.value = res.data || []
-    }
-  } catch (error) {
-    console.error('获取通道列表失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchChannels()
-})
-</script>
-
 <template>
   <div>
     <h2 class="text-2xl font-bold text-gray-800 mb-6">通道管理</h2>
@@ -63,3 +37,29 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { getChannelList } from '@/api/admin'
+
+const channels = ref<any[]>([])
+const loading = ref(false)
+
+async function fetchChannels() {
+  loading.value = true
+  try {
+    const res = await getChannelList()
+    if (res.code === 0) {
+      channels.value = res.data || []
+    }
+  } catch (error) {
+    console.error('获取通道列表失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchChannels()
+})
+</script>

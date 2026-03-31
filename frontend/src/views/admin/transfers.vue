@@ -1,7 +1,3 @@
-<script setup lang="ts">
-// 转账管理页面
-</script>
-
 <template>
   <div>
     <h2 class="text-2xl font-bold text-gray-800 mb-6">转账管理</h2>
@@ -12,3 +8,6 @@
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+</script>
