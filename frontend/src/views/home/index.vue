@@ -2,6 +2,7 @@
   <div class="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
     <div class="container mx-auto px-4 py-16">
       <div class="text-center mb-12">
+        <img src="@/assets/paygo.png" alt="Logo" class="w-20 h-20 mx-auto mb-4" />
         <h1 class="text-4xl font-bold text-white mb-4">彩虹易支付</h1>
         <p class="text-blue-100">安全、快捷、稳定的聚合支付平台</p>
       </div>
@@ -17,14 +18,15 @@
 
           <div>
             <label class="form-label">支付方式</label>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-2 gap-3">
               <button v-for="pt in payTypes" :key="pt.id" type="button" :class="[
-                'p-3 rounded-lg border-2 text-center transition-all',
+                'p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center gap-2',
                 form.type === String(pt.id)
-                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'border-gray-200 hover:border-gray-300'
+                  ? 'border-primary-500 bg-primary-50 shadow-md'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
               ]" @click="form.type = String(pt.id)">
-                <div class="text-lg">{{ pt.name }}</div>
+                <SvgIcon :name="pt.icon" :size="32" />
+                <div class="font-medium" :class="form.type === String(pt.id) ? 'text-primary-700' : 'text-gray-600'">{{ pt.name }}</div>
               </button>
             </div>
           </div>
@@ -70,6 +72,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import SvgIcon from '@/components/svgicon.vue'
 
 const loading = ref(false)
 const form = ref({
@@ -84,7 +87,7 @@ const form = ref({
 
 const payTypes = [
   { id: 1, name: '支付宝', icon: 'alipay' },
-  { id: 2, name: '微信支付', icon: 'wechat' },
+  { id: 2, name: '微信支付', icon: 'wechatpay' },
 ]
 
 async function handleSubmit() {

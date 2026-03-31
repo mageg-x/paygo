@@ -91,15 +91,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { updateProfile, submitCertificate } from '@/api/user'
+import { ref, reactive, onMounted } from 'vue'
+import { updateProfile, submitCertificate, getUserInfo } from '@/api/user'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
 const activeTab = ref('info')
 
 const user = reactive({
-  uid: appStore.userInfo?.uid || 0,
+  uid: 0,
   username: '',
   email: '',
   phone: '',
@@ -115,6 +115,39 @@ const certForm = reactive({
 })
 
 const saving = ref(false)
+const loading = ref(false)
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    const res = await getUserInfo()
+    if (res.code === 0 && res.data) {
+      const u = res.data
+      user.uid = u.uid
+      user.username = u.username || ''
+      user.email = u.email || ''
+      user.phone = u.phone || ''
+      user.qq = u.qq || ''
+      user.key = u.key || ''
+      user.cert = u.cert || 0
+      // 更新全局状态
+      if (u.uid) {
+        appStore.userLogin(appStore.userToken, {
+          uid: u.uid,
+          username: u.username || '',
+          email: u.email || '',
+          phone: u.phone || '',
+          money: u.money || 0,
+          status: u.status || 1
+        })
+      }
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+  } finally {
+    loading.value = false
+  }
+})
 
 async function handleSaveProfile() {
   saving.value = true

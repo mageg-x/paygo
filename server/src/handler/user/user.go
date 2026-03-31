@@ -126,6 +126,31 @@ func (h *UserHandler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "已退出"})
 }
 
+// 获取商户信息
+func (h *UserHandler) Info(c *gin.Context) {
+	uid := c.GetUint("uid")
+	user, err := h.authSvc.GetUser(uid)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "用户不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "success",
+		"data": gin.H{
+			"uid":      user.UID,
+			"username": user.Username,
+			"email":    user.Email,
+			"phone":    user.Phone,
+			"qq":       user.Qq,
+			"money":    user.Money,
+			"status":   user.Status,
+			"key":      user.Key,
+			"cert":     user.Cert,
+		},
+	})
+}
+
 // 商户中心首页
 func (h *UserHandler) Index(c *gin.Context) {
 	uid := c.GetUint("uid")

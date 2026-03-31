@@ -75,9 +75,10 @@
               <td class="px-4 py-3 text-gray-600">{{ t.user_name || t.uid }}</td>
               <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ t.biz_no }}</td>
               <td class="px-4 py-3">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                  {{ typeName(t.type) }}
-                </span>
+                <div class="flex items-center gap-1.5">
+                  <SvgIcon :name="t.type === 'alipay' ? 'alipay' : 'wechatpay'" :size="16" />
+                  <span class="text-sm">{{ typeName(t.type) }}</span>
+                </div>
               </td>
               <td class="px-4 py-3 text-gray-600">{{ t.account }}</td>
               <td class="px-4 py-3 text-gray-600">{{ t.username }}</td>
@@ -170,6 +171,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getTransferList, transferOp } from '@/api/admin'
 import { ElMessage } from 'element-plus'
+import SvgIcon from '@/components/svgicon.vue'
 
 const transfers = ref<any[]>([])
 const page = ref(1)

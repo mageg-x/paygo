@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,19 +144,30 @@ func UserAuth() gin.HandlerFunc {
 			token = cookie
 		}
 
-		// TODO: 解密token获取用户信息
-		// token格式: uid\t session \t expiretime (加密)
+		// token格式: {uid}_{md5hash}
+		parts := strings.Split(token, "_")
+		if len(parts) != 2 {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
+			c.Abort()
+			return
+		}
 
-		// 临时实现：使用uid作为简单验证
+		uid, err := strconv.ParseUint(parts[0], 10, 32)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
+			c.Abort()
+			return
+		}
+
 		var user model.User
-		result := config.DB.First(&user, token)
+		result := config.DB.First(&user, uint(uid))
 		if result.Error != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
 			c.Abort()
 			return
 		}
 
-		if user.Status != 0 {
+		if user.Status != 1 {
 			c.JSON(http.StatusForbidden, gin.H{"code": -1, "msg": "账号已被禁用"})
 			c.Abort()
 			return

@@ -38,9 +38,10 @@
               <td class="px-4 py-3 text-gray-900">{{ ch.name }}</td>
               <td class="px-4 py-3 text-gray-600">{{ ch.plugin_showname || ch.plugin }}</td>
               <td class="px-4 py-3">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                  {{ typeName(ch.type) }}
-                </span>
+                <div class="flex items-center gap-1.5">
+                  <SvgIcon :name="ch.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
+                  <span class="text-sm">{{ typeName(ch.type) }}</span>
+                </div>
               </td>
               <td class="px-4 py-3 text-right">
                 <span class="font-semibold text-green-600">{{ ch.rate }}%</span>
@@ -171,6 +172,7 @@
 import { ref, onMounted } from 'vue'
 import { getChannelList, channelOp, getPluginList } from '@/api/admin'
 import { ElMessage } from 'element-plus'
+import SvgIcon from '@/components/svgicon.vue'
 
 const channels = ref<any[]>([])
 const plugins = ref<any[]>([])
@@ -195,6 +197,7 @@ async function fetchChannels() {
   try {
     const res = await getChannelList()
     if (res.code === 0) {
+      console.log('channels response:', res.data)
       channels.value = res.data || []
     }
   } catch (error) {
@@ -243,11 +246,16 @@ function showEditModal(ch: any) {
     rate: ch.rate,
     costrate: ch.costrate,
     daytop: ch.daytop,
-    paymin: ch.paymin,
-    paymax: ch.paymax,
+    paymin: Number(ch.paymin) || 10,
+    paymax: Number(ch.paymax) || 5000,
     apptype: ch.apptype || '',
     status: ch.status
   }
+  // 确保插件列表已加载
+  if (plugins.value.length === 0) {
+    fetchPlugins()
+  }
+  console.log('edit modal - ch.plugin:', ch.plugin, 'plugins:', plugins.value)
   showModal.value = true
 }
 

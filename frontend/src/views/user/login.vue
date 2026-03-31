@@ -2,9 +2,7 @@
   <div class="min-h-screen bg-gray-100 flex items-center justify-center">
     <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
       <div class="text-center mb-8">
-        <div class="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Store class="w-8 h-8 text-primary-600" />
-        </div>
+        <img src="@/assets/paygo.png" alt="Logo" class="w-16 h-16 mx-auto mb-4" />
         <h1 class="text-3xl font-bold text-gray-800">商户登录</h1>
         <p class="text-gray-500 mt-2">彩虹易支付</p>
       </div>
@@ -80,7 +78,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { userLogin } from '@/api/user'
 import { useAppStore } from '@/stores/app'
-import { Store, KeyRound, Key, Hash, Lock, LogIn, Loader2, UserPlus, AlertCircle } from 'lucide-vue-next'
+import { KeyRound, Key, Hash, Lock, LogIn, Loader2, UserPlus, AlertCircle } from 'lucide-vue-next'
 
 const router = useRouter()
 const appStore = useAppStore()

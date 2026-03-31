@@ -85,6 +85,7 @@
             <tr>
               <th>订单号</th>
               <th>商品名称</th>
+              <th>支付方式</th>
               <th>金额</th>
               <th>状态</th>
               <th>时间</th>
@@ -92,9 +93,15 @@
           </thead>
           <tbody>
             <tr v-for="order in recentOrders" :key="order.trade_no">
-              <td>{{ order.trade_no }}</td>
+              <td class="text-xs">{{ order.trade_no }}</td>
               <td>{{ order.name }}</td>
-              <td>¥{{ order.money }}</td>
+              <td>
+                <div class="flex items-center gap-1.5">
+                  <SvgIcon :name="order.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
+                  <span class="text-sm">{{ order.type === 1 ? '支付宝' : '微信' }}</span>
+                </div>
+              </td>
+              <td class="text-primary-600 font-medium">¥{{ order.money }}</td>
               <td>
                 <span :class="['badge', order.status === 1 ? 'badge-success' : 'badge-warning']">
                   {{ order.status === 1 ? '已支付' : '待支付' }}
@@ -103,7 +110,7 @@
               <td>{{ order.addtime }}</td>
             </tr>
             <tr v-if="recentOrders.length === 0">
-              <td colspan="5" class="text-center text-gray-500 py-8">暂无订单</td>
+              <td colspan="6" class="text-center text-gray-500 py-8">暂无订单</td>
             </tr>
           </tbody>
         </table>
@@ -115,6 +122,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { TrendingUp, ShoppingBag, Wallet, CheckCircle, FileText, Receipt, User } from 'lucide-vue-next'
+import SvgIcon from '@/components/svgicon.vue'
 
 const stats = ref({
   today_money: 0,

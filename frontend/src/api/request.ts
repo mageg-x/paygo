@@ -77,17 +77,21 @@ axiosInstance.interceptors.response.use(
     return res
   },
   (error) => {
-    // 401 未授权，登录过期
+    // 401 未授权，登录过期（但登录接口除外，让登录页显示具体错误）
     if (error.response?.status === 401) {
-      const isAdminRoute = error.config?.url?.includes('/admin/')
-      if (isAdminRoute) {
-        localStorage.removeItem('admin_token')
-        router.push('/admin/login')
-      } else {
-        localStorage.removeItem('user_token')
-        router.push('/user/login')
+      const url = error.config?.url || ''
+      const isLoginPage = url.includes('/admin/login') || url.includes('/user/login') || url.includes('/user/reg')
+      if (!isLoginPage) {
+        const isAdminRoute = url.includes('/admin/')
+        if (isAdminRoute) {
+          localStorage.removeItem('admin_token')
+          router.push('/admin/login')
+        } else {
+          localStorage.removeItem('user_token')
+          router.push('/user/login')
+        }
+        return Promise.reject(new Error('登录已过期'))
       }
-      return Promise.reject(new Error('登录已过期'))
     }
 
     const msg = error.response?.data?.msg || error.message || '网络错误'

@@ -32,7 +32,7 @@ export function userLogout(): Promise<ApiResponse> {
 
 // 获取用户信息
 export function getUserInfo(): Promise<ApiResponse> {
-  return request.get('/user/index')
+  return request.get('/user/info')
 }
 
 // 获取订单列表

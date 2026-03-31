@@ -17,55 +17,68 @@
     </div>
 
     <!-- 插件列表 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
       <div v-for="p in plugins" :key="p.name"
-        class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
-        <!-- 插件头部 -->
-        <div class="flex items-start justify-between mb-4">
-          <div class="flex-1">
-            <h3 class="font-semibold text-gray-900">{{ p.showname || p.name }}</h3>
-            <span class="inline-block mt-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs font-mono">{{ p.name
-              }}</span>
+        class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-lg transition-all hover:-translate-y-0.5">
+        <!-- 插件头部 - 带图标背景 -->
+        <div class="relative px-5 pt-5 pb-4">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-xl flex items-center justify-center"
+                :class="getPluginBgClass(p.types)">
+                <SvgIcon v-if="p.types?.includes('支付宝')" name="alipay" :size="28" />
+                <SvgIcon v-else-if="p.types?.includes('微信')" name="wechatpay" :size="28" />
+                <svg v-else class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="font-semibold text-gray-900 text-lg">{{ p.showname || p.name }}</h3>
+                <span class="text-xs text-gray-400 font-mono">{{ p.name }}</span>
+              </div>
+            </div>
+            <span
+              :class="['inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium', 
+                p.status ? 'bg-green-100 text-green-700 ring-1 ring-green-200' : 'bg-gray-100 text-gray-500 ring-1 ring-gray-200']">
+              <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="p.status ? 'bg-green-500' : 'bg-gray-400'"></span>
+              {{ p.status ? '已启用' : '已禁用' }}
+            </span>
           </div>
-          <span
-            :class="['inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', p.status ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">
-            {{ p.status ? '启用' : '禁用' }}
-          </span>
         </div>
 
         <!-- 插件信息 -->
-        <div class="space-y-2 mb-4">
-          <div class="flex items-center text-sm text-gray-600">
-            <svg class="w-5 h-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        <div class="px-5 pb-4 space-y-2">
+          <div class="flex items-center text-sm text-gray-500">
+            <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            {{ p.author || '未知作者' }}
+            <span>{{ p.author || '未知作者' }}</span>
           </div>
-          <div class="flex items-center text-sm text-gray-600">
-            <svg class="w-5 h-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          <div class="flex items-center text-sm text-gray-500">
+            <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <span class="truncate">{{ p.types || '未知' }}</span>
+            <span>{{ p.types || '未知类型' }}</span>
           </div>
           <div v-if="p.transtypes" class="flex items-center text-sm text-gray-500">
-            <svg class="w-5 h-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
-            <span class="truncate">转账: {{ p.transtypes }}</span>
+            <span>转账: {{ p.transtypes }}</span>
           </div>
         </div>
 
         <!-- 操作按钮 -->
-        <div class="flex gap-2 pt-3 border-t border-gray-100">
+        <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex gap-2">
           <button @click="toggleStatus(p)"
-            :class="['flex-1 py-2 text-sm font-medium rounded-lg transition-colors', p.status ? 'text-yellow-600 bg-yellow-50 hover:bg-yellow-100' : 'text-green-600 bg-green-50 hover:bg-green-100']">
+            :class="['flex-1 py-2 text-sm font-medium rounded-lg transition-all', 
+              p.status 
+                ? 'text-amber-600 bg-amber-50 hover:bg-amber-100 ring-1 ring-amber-200' 
+                : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200']">
             {{ p.status ? '禁用' : '启用' }}
           </button>
           <button @click="showConfig(p)"
-            class="flex-1 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
+            class="flex-1 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-all ring-1 ring-blue-200">
             配置
           </button>
         </div>
@@ -104,7 +117,12 @@
                     currentPlugin.name }}</span></div>
                 <div class="text-gray-500">作者：<span class="text-gray-900">{{ currentPlugin.author || '未知' }}</span>
                 </div>
-                <div class="text-gray-500">支付方式：<span class="text-gray-900">{{ currentPlugin.types || '未知' }}</span>
+                <div class="text-gray-500">支付方式：
+                  <span class="text-gray-900 inline-flex items-center gap-1">
+                    <SvgIcon v-if="currentPlugin.types?.includes('支付宝')" name="alipay" :size="14" />
+                    <SvgIcon v-if="currentPlugin.types?.includes('微信')" name="wechatpay" :size="14" />
+                    {{ currentPlugin.types || '未知' }}
+                  </span>
                 </div>
                 <div class="text-gray-500">转账方式：<span class="text-gray-900">{{ currentPlugin.transtypes || '无' }}</span>
                 </div>
@@ -137,11 +155,18 @@
 import { ref, onMounted } from 'vue'
 import { getPluginList, pluginOp } from '@/api/admin'
 import { ElMessage } from 'element-plus'
+import SvgIcon from '@/components/svgicon.vue'
 
 const plugins = ref<any[]>([])
 const showConfigModal = ref(false)
 const currentPlugin = ref<any>(null)
 const pluginConfig = ref('')
+
+function getPluginBgClass(types: string) {
+  if (types?.includes('支付宝')) return 'bg-blue-50'
+  if (types?.includes('微信')) return 'bg-green-50'
+  return 'bg-gray-100'
+}
 
 async function fetchPlugins() {
   try {

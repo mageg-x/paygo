@@ -2,9 +2,7 @@
   <div class="min-h-screen bg-gray-100 flex items-center justify-center">
     <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
       <div class="text-center mb-8">
-        <div class="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <ShieldCheck class="w-8 h-8 text-primary-600" />
-        </div>
+        <img src="@/assets/paygo.png" alt="Logo" class="w-16 h-16 mx-auto mb-4" />
         <h1 class="text-3xl font-bold text-gray-800">管理员登录</h1>
         <p class="text-gray-500 mt-2">支付系统管理后台</p>
       </div>
@@ -47,7 +45,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminLogin } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import { ShieldCheck, User, Lock, AlertCircle, LogIn, Loader2 } from 'lucide-vue-next'
+import { User, Lock, AlertCircle, LogIn, Loader2 } from 'lucide-vue-next'
 
 const router = useRouter()
 const appStore = useAppStore()

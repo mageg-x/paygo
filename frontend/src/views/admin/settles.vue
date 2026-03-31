@@ -59,9 +59,10 @@
               <td class="px-4 py-3 text-gray-900 font-medium">{{ s.id }}</td>
               <td class="px-4 py-3 text-gray-600">{{ s.uid }}</td>
               <td class="px-4 py-3">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                  {{ settleType(s.type) }}
-                </span>
+                <div class="flex items-center gap-1.5">
+                  <SvgIcon :name="s.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
+                  <span class="text-sm">{{ settleType(s.type) }}</span>
+                </div>
               </td>
               <td class="px-4 py-3 text-gray-600">{{ s.account }}</td>
               <td class="px-4 py-3 text-gray-600">{{ s.username }}</td>
@@ -145,6 +146,7 @@ import { ref, computed, onMounted } from 'vue'
 import { getSettleList, settleOp } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
+import SvgIcon from '@/components/svgicon.vue'
 
 const settles = ref<any[]>([])
 const loading = ref(false)

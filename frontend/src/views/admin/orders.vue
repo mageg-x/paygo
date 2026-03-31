@@ -61,9 +61,10 @@
               <td class="px-4 py-3 text-gray-900">{{ order.name || '-' }}</td>
               <td class="px-4 py-3 text-right font-semibold text-gray-900">￥{{ order.money }}</td>
               <td class="px-4 py-3 text-center">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                  {{ order.typename || '未知' }}
-                </span>
+                <div class="flex items-center justify-center gap-1">
+                  <SvgIcon :name="order.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
+                  <span class="text-xs">{{ order.typename || '未知' }}</span>
+                </div>
               </td>
               <td class="px-4 py-3 text-center">
                 <span
@@ -124,6 +125,7 @@ import { ref, computed, onMounted } from 'vue'
 import { getOrderList, orderOp } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
+import SvgIcon from '@/components/svgicon.vue'
 
 interface Order {
   trade_no: string

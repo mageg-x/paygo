@@ -17,7 +17,12 @@
           </thead>
           <tbody>
             <tr v-for="s in settles" :key="s.id">
-              <td>{{ ['支付宝', '微信'][s.type - 1] }}</td>
+              <td>
+                <div class="flex items-center gap-1.5">
+                  <SvgIcon :name="s.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
+                  <span>{{ s.type === 1 ? '支付宝' : '微信' }}</span>
+                </div>
+              </td>
               <td>{{ s.account }}</td>
               <td class="text-warning">¥{{ s.money }}</td>
               <td class="text-success">¥{{ s.realmoney }}</td>
@@ -42,6 +47,7 @@
 import { ref, onMounted } from 'vue'
 import { getUserSettles } from '@/api/user'
 import dayjs from 'dayjs'
+import SvgIcon from '@/components/svgicon.vue'
 
 const settles = ref<any[]>([])
 const loading = ref(false)

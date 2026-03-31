@@ -3,9 +3,7 @@
     <header class="bg-white shadow-sm border-b border-gray-200">
       <div class="flex items-center justify-between px-6 py-3">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-            <Shield class="w-5 h-5 text-primary-600" />
-          </div>
+          <img src="@/assets/paygo.png" alt="Logo" class="w-8 h-8" />
           <h1 class="text-xl font-bold text-gray-800">支付系统 - 管理后台</h1>
         </div>
         <div class="flex items-center gap-4">
@@ -53,7 +51,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminLogout } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import { Home, Users, FileText, Wallet, ArrowLeftRight, Strikethrough, Puzzle, Settings, Shield, User, LogOut } from 'lucide-vue-next'
+import { Home, Users, FileText, Wallet, ArrowLeftRight, Strikethrough, Puzzle, Settings, User, LogOut } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()

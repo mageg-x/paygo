@@ -3,9 +3,7 @@
     <header class="bg-white shadow-sm border-b border-gray-200">
       <div class="flex items-center justify-between px-6 py-3">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-            <Store class="w-5 h-5 text-primary-600" />
-          </div>
+          <img src="@/assets/paygo.png" alt="Logo" class="w-8 h-8" />
           <h1 class="text-xl font-bold text-gray-800">商户后台</h1>
         </div>
         <div class="flex items-center gap-4">
@@ -49,11 +47,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { userLogout } from '@/api/user'
+import { userLogout, getUserInfo } from '@/api/user'
 import { useAppStore } from '@/stores/app'
-import { Home, FileText, Wallet, Receipt, User, Store, LogOut } from 'lucide-vue-next'
+import { Home, FileText, Wallet, Receipt, User, LogOut } from 'lucide-vue-next'
 
 const router = useRouter()
 const route = useRoute()
@@ -68,6 +66,29 @@ const menus = [
 ]
 
 const activeMenu = computed(() => route.path)
+
+// 页面加载时检查用户信息
+onMounted(async () => {
+  // 如果有 token 但没有 userInfo，获取用户信息
+  if (appStore.userToken && !appStore.userInfo) {
+    try {
+      const res = await getUserInfo()
+      if (res.code === 0 && res.data) {
+        const u = res.data
+        appStore.userLogin(appStore.userToken, {
+          uid: u.uid,
+          username: u.username || '',
+          email: u.email || '',
+          phone: u.phone || '',
+          money: u.money || 0,
+          status: u.status || 1
+        })
+      }
+    } catch (error) {
+      console.error('获取用户信息失败:', error)
+    }
+  }
+})
 
 async function handleLogout() {
   try {

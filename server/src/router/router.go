@@ -91,6 +91,7 @@ func SetupRouter() *gin.Engine {
 		userAuth := api.Group("/user")
 		userAuth.Use(middleware.UserAuth())
 		{
+			userAuth.GET("/info", userHandler.Info)
 			userAuth.POST("/logout", userHandler.Logout)
 			userAuth.POST("/order/list", userHandler.AjaxOrderList)
 			userAuth.POST("/settle/apply", userHandler.ApplySettle)

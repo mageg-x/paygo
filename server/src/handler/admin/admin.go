@@ -59,7 +59,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	token, err := h.authSvc.AdminLogin(req.Username, req.Password)
 	if err != nil {
 		log.Printf("[管理员登录失败] IP: %s, 用户名: %s, 错误: %s", ip, req.Username, err.Error())
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": err.Error()})
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
 
@@ -409,13 +409,20 @@ func (h *AdminHandler) AjaxTransferList(c *gin.Context) {
 
 // AJAX: 转账操作
 func (h *AdminHandler) AjaxTransferOp(c *gin.Context) {
-	action := c.PostForm("action")
-	bizNo := c.PostForm("biz_no")
+	var req struct {
+		Action string `json:"action"`
+		BizNo  string `json:"biz_no"`
+		Status int    `json:"status"`
+		Result string `json:"result"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
 
-	switch action {
+	switch req.Action {
 	case "query":
-		// 查询转账状态
-		_, err := h.transferSvc.QueryTransfer(bizNo)
+		_, err := h.transferSvc.QueryTransfer(req.BizNo)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 			return
@@ -423,10 +430,7 @@ func (h *AdminHandler) AjaxTransferOp(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "查询成功"})
 		return
 	case "set_status":
-		// 修改转账状态
-		status, _ := strconv.Atoi(c.PostForm("status"))
-		result := c.PostForm("result")
-		err := h.transferSvc.UpdateTransferStatus(bizNo, status, result)
+		err := h.transferSvc.UpdateTransferStatus(req.BizNo, req.Status, req.Result)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 			return
@@ -434,8 +438,7 @@ func (h *AdminHandler) AjaxTransferOp(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
 		return
 	case "delete":
-		// 删除转账记录
-		result := config.DB.Where("biz_no = ?", bizNo).Delete(&model.Transfer{})
+		result := config.DB.Where("biz_no = ?", req.BizNo).Delete(&model.Transfer{})
 		if result.Error != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
 			return
@@ -443,8 +446,7 @@ func (h *AdminHandler) AjaxTransferOp(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
 		return
 	case "refund":
-		// 退回转账
-		err := h.transferSvc.RefundTransfer(bizNo)
+		err := h.transferSvc.RefundTransfer(req.BizNo)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 			return
@@ -461,17 +463,60 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 	var channels []model.Channel
 	config.DB.Find(&channels)
 
-	// 获取插件名称
-	type ChannelWithPlugin struct {
-		model.Channel
-		PluginShowname string `json:"plugin_showname"`
+	// 获取内置插件信息
+	builtInPlugins := plugin.GetAllPluginsInfo()
+	builtInMap := make(map[string]plugin.PluginInfo)
+	for _, p := range builtInPlugins {
+		builtInMap[p.Name] = p
 	}
-	result := make([]ChannelWithPlugin, len(channels))
+
+	// 构建响应数据
+	type ChannelResponse struct {
+		ID              uint    `json:"id"`
+		Mode            int     `json:"mode"`
+		Type            int     `json:"type"`
+		Plugin          string  `json:"plugin"`
+		Name            string  `json:"name"`
+		Rate            float64 `json:"rate"`
+		Status          int     `json:"status"`
+		Apptype         string  `json:"apptype"`
+		Daytop          int     `json:"daytop"`
+		Daystatus       int     `json:"daystatus"`
+		Paymin          string  `json:"paymin"`
+		Paymax          string  `json:"paymax"`
+		Appwxmp         int     `json:"appwxmp"`
+		Appwxa          int     `json:"appwxa"`
+		Costrate        float64 `json:"costrate"`
+		Config          string  `json:"config"`
+		PluginShowname   string  `json:"plugin_showname"`
+	}
+
+	result := make([]ChannelResponse, len(channels))
 	for i, ch := range channels {
-		result[i] = ChannelWithPlugin{Channel: ch}
+		result[i] = ChannelResponse{
+			ID:       ch.ID,
+			Mode:     ch.Mode,
+			Type:     ch.Type,
+			Plugin:   ch.Plugin,
+			Name:     ch.Name,
+			Rate:     ch.Rate,
+			Status:   ch.Status,
+			Apptype:  ch.Apptype,
+			Daytop:   ch.Daytop,
+			Daystatus: ch.Daystatus,
+			Paymin:   ch.Paymin,
+			Paymax:   ch.Paymax,
+			Appwxmp:  ch.Appwxmp,
+			Appwxa:   ch.Appwxa,
+			Costrate: ch.Costrate,
+			Config:   ch.Config,
+		}
+		// 获取插件显示名
 		var plugin model.Plugin
 		if err := config.DB.First(&plugin, "name = ?", ch.Plugin).Error; err == nil {
 			result[i].PluginShowname = plugin.Showname
+		} else if bp, ok := builtInMap[ch.Plugin]; ok {
+			result[i].PluginShowname = bp.Showname
 		}
 	}
 
@@ -484,31 +529,32 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 
 // AJAX: 通道操作
 func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
-	action := c.PostForm("action")
+	var req struct {
+		Action   string  `json:"action"`
+		ID       uint    `json:"id"`
+		Name     string  `json:"name"`
+		Plugin   string  `json:"plugin"`
+		Type     int     `json:"type"`
+		Mode     int     `json:"mode"`
+		Rate     float64 `json:"rate"`
+		Costrate float64 `json:"costrate"`
+		Daytop   int     `json:"daytop"`
+		Paymin   float64 `json:"paymin"`
+		Paymax   float64 `json:"paymax"`
+		Apptype  string  `json:"apptype"`
+		Status   int     `json:"status"`
+		Config   string  `json:"config"`
+	}
 
-	switch action {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[channel_op_params_error] err=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
 	case "add", "edit":
-		// 添加或编辑通道
-		var req struct {
-			ID        uint    `json:"id"`
-			Name      string  `json:"name"`
-			Plugin    string  `json:"plugin"`
-			Type      int     `json:"type"`
-			Mode      int     `json:"mode"`
-			Rate      float64 `json:"rate"`
-			Costrate  float64 `json:"costrate"`
-			Daytop    int     `json:"daytop"`
-			Paymin    string  `json:"paymin"`
-			Paymax    string  `json:"paymax"`
-			Apptype   string  `json:"apptype"`
-			Status    int     `json:"status"`
-			Config    string  `json:"config"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
-			return
-		}
-
+		log.Printf("[channel_op] action=%s, name=%s, plugin=%s, type=%d", req.Action, req.Name, req.Plugin, req.Type)
 		channel := model.Channel{
 			Name:     req.Name,
 			Plugin:   req.Plugin,
@@ -517,22 +563,22 @@ func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
 			Rate:     req.Rate,
 			Costrate: req.Costrate,
 			Daytop:   req.Daytop,
-			Paymin:   req.Paymin,
-			Paymax:   req.Paymax,
+			Paymin:   strconv.FormatFloat(req.Paymin, 'f', 2, 64),
+			Paymax:   strconv.FormatFloat(req.Paymax, 'f', 2, 64),
 			Apptype:  req.Apptype,
 			Status:   req.Status,
 			Config:   req.Config,
 		}
 
 		var err error
-		if action == "edit" {
+		if req.Action == "edit" {
 			err = config.DB.Model(&model.Channel{}).Where("id = ?", req.ID).Updates(channel).Error
 		} else {
 			err = config.DB.Create(&channel).Error
 		}
 
 		if err != nil {
-			log.Printf("[channel_op_%s_failed] error=%s", action, err.Error())
+			log.Printf("[channel_op_%s_failed] error=%s", req.Action, err.Error())
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
 			return
 		}
@@ -540,8 +586,7 @@ func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
 		return
 
 	case "delete":
-		id, _ := strconv.Atoi(c.PostForm("id"))
-		result := config.DB.Delete(&model.Channel{}, "id = ?", id)
+		result := config.DB.Delete(&model.Channel{}, "id = ?", req.ID)
 		if result.Error != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
 			return
@@ -550,16 +595,13 @@ func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
 		return
 
 	case "set_status":
-		id, _ := strconv.Atoi(c.PostForm("id"))
-		status, _ := strconv.Atoi(c.PostForm("status"))
-		config.DB.Model(&model.Channel{}).Where("id = ?", id).Update("status", status)
+		config.DB.Model(&model.Channel{}).Where("id = ?", req.ID).Update("status", req.Status)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
 		return
 
 	case "get":
-		id, _ := strconv.Atoi(c.Query("id"))
 		var ch model.Channel
-		if err := config.DB.First(&ch, id).Error; err != nil {
+		if err := config.DB.First(&ch, req.ID).Error; err != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "通道不存在"})
 			return
 		}
@@ -568,7 +610,6 @@ func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
 
 	case "get_plugins":
 		// 获取某类型支持的插件列表
-		typ, _ := strconv.Atoi(c.Query("type"))
 		var plugins []model.Plugin
 		// 根据支付类型筛选插件
 		config.DB.Find(&plugins)
@@ -576,7 +617,7 @@ func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
 		for _, p := range plugins {
 			// 简单判断：插件的types字段包含对应类型
 			// 1=支付宝, 2=微信, 3=QQ, 4=银行卡
-			switch typ {
+			switch req.Type {
 			case 1:
 				if len(p.Types) > 0 && (p.Types[0] == '1' || p.Types[0] == 'a' || p.Types[0] == 'A') {
 					filtered = append(filtered, p)
@@ -657,18 +698,25 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 
 // AJAX: 插件操作
 func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
-	action := c.PostForm("action")
+	var req struct {
+		Action string `json:"action"`
+		Name   string `json:"name"`
+		Status int    `json:"status"`
+		Config string `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
 
-	switch action {
+	switch req.Action {
 	case "refresh":
-		// 刷新插件：同步内置插件到数据库
 		builtInPlugins := plugin.GetAllPluginsInfo()
 		synced := 0
 		for _, p := range builtInPlugins {
 			var existing model.Plugin
 			err := config.DB.First(&existing, "name = ?", p.Name).Error
 			if err != nil {
-				// 不存在，创建
 				newPlugin := model.Plugin{
 					Name:       p.Name,
 					Showname:   p.Showname,
@@ -688,23 +736,19 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 		return
 
 	case "set_status":
-		name := c.PostForm("name")
-		status, _ := strconv.Atoi(c.PostForm("status"))
-		result := config.DB.Model(&model.Plugin{}).Where("name = ?", name).Update("status", status)
+		result := config.DB.Model(&model.Plugin{}).Where("name = ?", req.Name).Update("status", req.Status)
 		if result.Error != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新失败"})
 			return
 		}
-		log.Printf("[插件状态更新] name=%s, status=%d", name, status)
+		log.Printf("[插件状态更新] name=%s, status=%d", req.Name, req.Status)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
 		return
 
 	case "get_config":
-		name := c.Query("name")
 		var dbPlugin model.Plugin
-		if err := config.DB.First(&dbPlugin, "name = ?", name).Error; err != nil {
-			// 数据库没有，尝试从内置插件获取
-			builtIn := plugin.GetHandler(name)
+		if err := config.DB.First(&dbPlugin, "name = ?", req.Name).Error; err != nil {
+			builtIn := plugin.GetHandler(req.Name)
 			if builtIn == nil {
 				c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "插件不存在"})
 				return
@@ -713,13 +757,13 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"code": 0,
 				"data": gin.H{
-					"name":        name,
-					"showname":     info.Showname,
-					"author":      info.Author,
-					"types":       strings.Join(info.Types, ","),
-					"transtypes":  strings.Join(info.Transtypes, ","),
-					"inputs":       info.Inputs,
-					"config":      "{}",
+					"name":       req.Name,
+					"showname":   info.Showname,
+					"author":     info.Author,
+					"types":     strings.Join(info.Types, ","),
+					"transtypes": strings.Join(info.Transtypes, ","),
+					"inputs":     info.Inputs,
+					"config":    "{}",
 				},
 			})
 			return
@@ -728,17 +772,16 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 		return
 
 	case "save_config":
-		name := c.PostForm("name")
-		cfg := c.PostForm("config")
+		cfg := req.Config
 		if cfg == "" {
 			cfg = "{}"
 		}
-		result := config.DB.Model(&model.Plugin{}).Where("name = ?", name).Update("config", cfg)
+		result := config.DB.Model(&model.Plugin{}).Where("name = ?", req.Name).Update("config", cfg)
 		if result.Error != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
 			return
 		}
-		log.Printf("[插件配置保存] name=%s", name)
+		log.Printf("[插件配置保存] name=%s", req.Name)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "配置已保存"})
 		return
 	}
@@ -798,21 +841,25 @@ func (h *AdminHandler) AjaxOrderList(c *gin.Context) {
 
 // AJAX: 订单操作
 func (h *AdminHandler) AjaxOrderOp(c *gin.Context) {
-	action := c.PostForm("action")
-	tradeNo := c.PostForm("trade_no")
+	var req struct {
+		Action  string  `json:"action"`
+		TradeNo string  `json:"trade_no"`
+		Money   float64 `json:"money"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
 
 	var err error
-	switch action {
+	switch req.Action {
 	case "refund":
-		moneyStr := c.PostForm("money")
-		money, _ := strconv.ParseFloat(moneyStr, 10)
-		err = h.orderSvc.Refund(tradeNo, money)
+		err = h.orderSvc.Refund(req.TradeNo, req.Money)
 	case "freeze":
-		err = h.orderSvc.Freeze(tradeNo)
+		err = h.orderSvc.Freeze(req.TradeNo)
 	case "unfreeze":
-		err = h.orderSvc.Unfreeze(tradeNo)
+		err = h.orderSvc.Unfreeze(req.TradeNo)
 	case "notify":
-		// 重新通知
 		err = nil
 	}
 
@@ -849,26 +896,31 @@ func (h *AdminHandler) AjaxUserList(c *gin.Context) {
 
 // AJAX: 商户操作
 func (h *AdminHandler) AjaxUserOp(c *gin.Context) {
-	action := c.PostForm("action")
-	uid, _ := strconv.Atoi(c.PostForm("uid"))
+	var req struct {
+		Action string `json:"action"`
+		UID    uint   `json:"uid"`
+		Status int    `json:"status"`
+		Money  float64 `json:"money"`
+		Type   string `json:"type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
 
-	switch action {
+	switch req.Action {
 	case "reset_key":
-		// 重置密钥
 		newKey := generateAPIKey()
-		config.DB.Model(&model.User{}).Where("uid = ?", uid).Update("key", newKey)
-		log.Printf("[admin_reset_key] uid=%d, new_key=%s", uid, newKey)
+		config.DB.Model(&model.User{}).Where("uid = ?", req.UID).Update("key", newKey)
+		log.Printf("[admin_reset_key] uid=%d, new_key=%s", req.UID, newKey)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "密钥已重置", "key": newKey})
 		return
 	case "set_status":
-		status, _ := strconv.Atoi(c.PostForm("status"))
-		config.DB.Model(&model.User{}).Where("uid = ?", uid).Update("status", status)
+		config.DB.Model(&model.User{}).Where("uid = ?", req.UID).Update("status", req.Status)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
 		return
 	case "recharge":
-		money, _ := strconv.ParseFloat(c.PostForm("money"), 10)
-		typ := c.PostForm("type")
-		err := h.transferSvc.AdminChangeMoney(uint(uid), money, typ, "管理员操作")
+		err := h.transferSvc.AdminChangeMoney(req.UID, req.Money, req.Type, "管理员操作")
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 			return
@@ -876,18 +928,17 @@ func (h *AdminHandler) AjaxUserOp(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
 		return
 	case "delete":
-		// 删除商户
-		if uid <= 0 {
+		if req.UID <= 0 {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "无效的商户ID"})
 			return
 		}
-		result := config.DB.Delete(&model.User{}, "uid = ?", uid)
+		result := config.DB.Delete(&model.User{}, "uid = ?", req.UID)
 		if result.Error != nil {
-			log.Printf("[admin_delete_user_failed] uid=%d, error=%s", uid, result.Error.Error())
+			log.Printf("[admin_delete_user_failed] uid=%d, error=%s", req.UID, result.Error.Error())
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
 			return
 		}
-		log.Printf("[admin_delete_user_success] uid=%d", uid)
+		log.Printf("[admin_delete_user_success] uid=%d", req.UID)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
 		return
 	}
@@ -1107,16 +1158,22 @@ func generateAdminToken(username, password, sysKey string) string {
 
 // AJAX: 结算操作
 func (h *AdminHandler) AjaxSettleOp(c *gin.Context) {
-	action := c.PostForm("action")
-	id, _ := strconv.Atoi(c.PostForm("id"))
+	var req struct {
+		Action string `json:"action"`
+		ID     uint   `json:"id"`
+		Reason string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
 
 	var err error
-	switch action {
+	switch req.Action {
 	case "approve":
-		err = h.settleSvc.ApproveSettle(uint(id))
+		err = h.settleSvc.ApproveSettle(req.ID)
 	case "reject":
-		reason := c.PostForm("reason")
-		err = h.settleSvc.RejectSettle(uint(id), reason)
+		err = h.settleSvc.RejectSettle(req.ID, req.Reason)
 	}
 
 	if err != nil {

@@ -38,7 +38,7 @@ type Channel struct {
 	ID         uint      `gorm:"primaryKey;column:id" json:"id"`
 	Mode       int       `gorm:"column:mode" json:"mode"`
 	Type       int       `gorm:"column:type" json:"type"`
-	Plugin     string    `gorm:"column:plugin" json:"paygo/plugin"`
+	Plugin     string    `gorm:"column:plugin" json:"plugin"`
 	Name       string    `gorm:"column:name" json:"name"`
 	Rate       float64   `gorm:"column:rate;type:decimal(5,2)" json:"rate"`
 	Status     int       `gorm:"column:status" json:"status"`
@@ -50,7 +50,7 @@ type Channel struct {
 	Appwxmp    int       `gorm:"column:appwxmp" json:"appwxmp"`
 	Appwxa     int       `gorm:"column:appwxa" json:"appwxa"`
 	Costrate   float64   `gorm:"column:costrate;type:decimal(5,2)" json:"costrate"`
-	Config     string    `gorm:"column:config" json:"paygo/config"`
+	Config     string    `gorm:"column:config" json:"config"`
 }
 
 func (Channel) TableName() string {
