@@ -18,17 +18,12 @@
         <div class="mb-6">
           <div class="text-sm text-gray-600 mb-3">选择支付方式</div>
           <div class="grid grid-cols-2 gap-3">
-            <button
-              v-for="pt in payTypes"
-              :key="pt.id"
-              :class="[
-                'p-4 rounded-xl border-2 text-center transition-all',
-                selectedType === pt.id
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              ]"
-              @click="selectPayType(pt.id)"
-            >
+            <button v-for="pt in payTypes" :key="pt.id" :class="[
+              'p-4 rounded-xl border-2 text-center transition-all',
+              selectedType === pt.id
+                ? 'border-primary-500 bg-primary-50'
+                : 'border-gray-200 hover:border-gray-300'
+            ]" @click="selectPayType(pt.id)">
               <div class="text-lg font-medium">{{ pt.name }}</div>
             </button>
           </div>
@@ -36,7 +31,8 @@
 
         <div v-if="qrCodeUrl" class="text-center mb-6">
           <img :src="qrCodeUrl" alt="支付二维码" class="mx-auto mb-4" />
-          <p class="text-sm text-gray-500">请使用{{ selectedType === 'alipay' ? '支付宝' : selectedType === 'wxpay' ? '微信' : 'QQ' }}扫码支付</p>
+          <p class="text-sm text-gray-500">请使用{{ selectedType === 'alipay' ? '支付宝' : selectedType === 'wxpay' ? '微信' :
+            'QQ' }}扫码支付</p>
         </div>
 
         <div class="text-center text-sm text-gray-500">

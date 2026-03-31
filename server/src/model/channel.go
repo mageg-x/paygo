@@ -25,6 +25,8 @@ type Plugin struct {
 	Link       string `gorm:"column:link" json:"link"`
 	Types      string `gorm:"column:types" json:"types"`
 	Transtypes string `gorm:"column:transtypes" json:"transtypes"`
+	Status     int    `gorm:"column:status;default:1" json:"status"`     // 0=禁用, 1=启用
+	Config     string `gorm:"column:config" json:"config"`                 // 插件私有配置JSON
 }
 
 func (Plugin) TableName() string {

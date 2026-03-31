@@ -32,19 +32,19 @@
             <form @submit.prevent="handleSaveProfile" class="space-y-4">
               <div class="mb-4">
                 <label class="form-label">用户名</label>
-                <input v-model="user.username" type="text" class="form-input" />
+                <input v-model="user.username" type="text" class="form-input px-3" />
               </div>
               <div class="mb-4">
                 <label class="form-label">邮箱</label>
-                <input v-model="user.email" type="email" class="form-input" />
+                <input v-model="user.email" type="email" class="form-input px-3" />
               </div>
               <div class="mb-4">
                 <label class="form-label">手机</label>
-                <input v-model="user.phone" type="tel" class="form-input" />
+                <input v-model="user.phone" type="tel" class="form-input px-3" />
               </div>
               <div class="mb-4">
                 <label class="form-label">QQ</label>
-                <input v-model="user.qq" type="text" class="form-input" />
+                <input v-model="user.qq" type="text" class="form-input px-3" />
               </div>
               <button type="submit" class="btn btn-primary">保存</button>
             </form>
@@ -57,11 +57,11 @@
               <form @submit.prevent="handleCertSubmit" class="space-y-4">
                 <div class="mb-4">
                   <label class="form-label">真实姓名</label>
-                  <input v-model="certForm.certname" type="text" class="form-input" required />
+                  <input v-model="certForm.certname" type="text" class="form-input px-3" required />
                 </div>
                 <div class="mb-4">
                   <label class="form-label">身份证号</label>
-                  <input v-model="certForm.certno" type="text" class="form-input" required />
+                  <input v-model="certForm.certno" type="text" class="form-input px-3" required />
                 </div>
                 <button type="submit" class="btn btn-primary">提交认证</button>
               </form>
@@ -76,11 +76,11 @@
           <div class="card-body">
             <div class="mb-4">
               <label class="form-label">商户ID</label>
-              <input :value="user.uid" type="text" class="form-input" readonly />
+              <input :value="user.uid" type="text" class="form-input px-3" readonly />
             </div>
             <div class="mb-4">
               <label class="form-label">API密钥</label>
-              <input :value="user.key" type="text" class="form-input" readonly />
+              <input :value="user.key" type="text" class="form-input px-3" readonly />
             </div>
             <p class="text-sm text-gray-500">如需重置密钥请联系管理员</p>
           </div>
@@ -93,16 +93,18 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { updateProfile, submitCertificate } from '@/api/user'
+import { useAppStore } from '@/stores/app'
 
+const appStore = useAppStore()
 const activeTab = ref('info')
 
 const user = reactive({
-  uid: 1001,
+  uid: appStore.userInfo?.uid || 0,
   username: '',
   email: '',
   phone: '',
   qq: '',
-  key: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  key: '',
   cert: 0
 })
 
@@ -117,7 +119,7 @@ const saving = ref(false)
 async function handleSaveProfile() {
   saving.value = true
   try {
-    const res = await updateProfile(user)
+    const res = await updateProfile({ username: user.username, phone: user.phone, qq: user.qq })
     if (res.code === 0) {
       alert('保存成功')
     }
@@ -133,6 +135,7 @@ async function handleCertSubmit() {
     const res = await submitCertificate(certForm)
     if (res.code === 0) {
       alert('提交成功')
+      user.cert = 1 // 待审核
     }
   } catch (error) {
     console.error('提交失败:', error)

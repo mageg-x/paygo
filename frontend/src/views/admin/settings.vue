@@ -1,106 +1,284 @@
 <template>
-  <div>
-    <h2 class="text-2xl font-bold text-gray-800 mb-6">系统设置</h2>
+  <div class="space-y-4">
+    <!-- 页面标题 -->
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">系统设置</h1>
+      <p class="text-sm text-gray-500 mt-1">配置网站各项参数</p>
+    </div>
 
     <div class="flex gap-6">
       <!-- 标签导航 -->
-      <div class="w-48">
-        <div class="bg-white rounded-lg border p-2">
-          <button v-for="tab in tabs" :key="tab.id" :class="[
-            'w-full text-left px-4 py-2 rounded-lg text-sm transition-colors',
-            activeTab === tab.id
-              ? 'bg-primary-50 text-primary-700'
-              : 'text-gray-600 hover:bg-gray-50'
-          ]" @click="activeTab = tab.id">
+      <div class="w-48 flex-shrink-0">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-2">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            :class="[
+              'w-full text-left px-4 py-2.5 rounded-lg text-sm transition-colors',
+              activeTab === tab.id
+                ? 'bg-blue-50 text-blue-700 font-medium'
+                : 'text-gray-600 hover:bg-gray-50'
+            ]"
+            @click="activeTab = tab.id"
+          >
             {{ tab.name }}
           </button>
         </div>
       </div>
 
       <!-- 设置表单 -->
-      <div class="flex-1">
-        <div class="card">
-          <div class="card-body">
-            <div v-if="successMsg" class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p class="text-sm text-green-600">{{ successMsg }}</p>
+      <div class="flex-1 min-w-0">
+        <!-- 成功/错误提示 -->
+        <div v-if="successMsg" class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <p class="text-sm text-green-600">{{ successMsg }}</p>
+        </div>
+        <div v-if="errorMsg" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-sm text-red-600">{{ errorMsg }}</p>
+        </div>
+
+        <!-- 网站设置 -->
+        <div v-show="activeTab === 'site'" class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">网站信息</h3>
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">网站名称</label>
+                <input v-model="form.sitename" type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">网站标题</label>
+                <input v-model="form.title" type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
-
-            <div v-if="errorMsg" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p class="text-sm text-red-600">{{ errorMsg }}</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">回调地址</label>
+                <input v-model="form.localurl" type="text" placeholder="以 http:// 或 https:// 开头，以 / 结尾" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">API地址</label>
+                <input v-model="form.apiurl" type="text" placeholder="用户对接地址" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
-
-            <form v-if="activeTab !== 'account'" @submit.prevent="handleSave" class="space-y-4">
-              <div v-if="activeTab === 'site'">
-                <div class="mb-4">
-                  <label class="form-label">网站名称</label>
-                  <input v-model="form.sitename" type="text" class="form-input" />
-                </div>
-                <div class="mb-4">
-                  <label class="form-label">本地地址</label>
-                  <input v-model="form.localurl" type="text" class="form-input" />
-                </div>
-                <div class="mb-4">
-                  <label class="form-label">API地址</label>
-                  <input v-model="form.apiurl" type="text" class="form-input" />
-                </div>
-                <div class="mb-4">
-                  <label class="form-label">客服QQ</label>
-                  <input v-model="form.kfqq" type="text" class="form-input" />
-                </div>
-                <div class="mb-4">
-                  <label class="form-label">开放注册</label>
-                  <select v-model="form.reg_open" class="form-input">
-                    <option value="0">关闭</option>
-                    <option value="1">开放</option>
-                    <option value="2">需要邀请码</option>
-                  </select>
-                </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">联系邮箱</label>
+                <input v-model="form.email" type="email" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-
-              <div v-if="activeTab === 'settle'">
-                <div class="mb-4">
-                  <label class="form-label">最低结算金额</label>
-                  <input v-model="form.settle_money" type="text" class="form-input" />
-                </div>
-                <div class="mb-4">
-                  <label class="form-label">支付宝结算</label>
-                  <select v-model="form.settle_alipay" class="form-input">
-                    <option value="1">开启</option>
-                    <option value="0">关闭</option>
-                  </select>
-                </div>
-                <div class="mb-4">
-                  <label class="form-label">微信结算</label>
-                  <select v-model="form.settle_wxpay" class="form-input">
-                    <option value="1">开启</option>
-                    <option value="0">关闭</option>
-                  </select>
-                </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">客服QQ</label>
+                <input v-model="form.kfqq" type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">开放注册</label>
+              <select v-model="form.reg_open" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">开放注册</option>
+                <option value="0">关闭注册</option>
+                <option value="2">仅邀请注册</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <button @click="handleSave" :disabled="saving" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+          </div>
+        </div>
 
-              <button type="submit" :disabled="saving" class="btn btn-primary">
-                {{ saving ? '保存中...' : '保存设置' }}
-              </button>
-            </form>
+        <!-- 支付设置 -->
+        <div v-show="activeTab === 'pay'" class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">支付相关配置</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">测试支付</label>
+              <select v-model="form.test_open" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+              <p class="text-xs text-gray-400 mt-1">开启后可以使用测试金额进行支付测试</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">支付成功页面</label>
+              <input v-model="form.pay_success_page" type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">支付失败页面</label>
+              <input v-model="form.pay_error_page" type="text" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <button @click="handleSave" :disabled="saving" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+          </div>
+        </div>
 
-            <form v-else @submit.prevent="handlePasswordChange" class="space-y-4">
-              <div class="mb-4">
-                <label class="form-label">原密码</label>
-                <input v-model="passwordForm.old_pwd" type="password" class="form-input" placeholder="请输入原密码" />
+        <!-- 结算设置 -->
+        <div v-show="activeTab === 'settle'" class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">结算规则配置</h3>
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">最低结算金额</label>
+                <input v-model="form.settle_money" type="number" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div class="mb-4">
-                <label class="form-label">新密码</label>
-                <input v-model="passwordForm.new_pwd" type="password" class="form-input" placeholder="请输入新密码（至少8位）" />
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">结算周期</label>
+                <select v-model="form.settle_cycle" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="0">实时结算</option>
+                  <option value="1">每日结算</option>
+                  <option value="2">每周结算</option>
+                  <option value="3">每月结算</option>
+                </select>
               </div>
-              <div class="mb-4">
-                <label class="form-label">确认新密码</label>
-                <input v-model="passwordForm.confirm_pwd" type="password" class="form-input" placeholder="请再次输入新密码" />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">支付宝结算</label>
+                <select v-model="form.settle_alipay" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="1">开启</option>
+                  <option value="0">关闭</option>
+                </select>
               </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">微信结算</label>
+                <select v-model="form.settle_wxpay" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="1">开启</option>
+                  <option value="0">关闭</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <button @click="handleSave" :disabled="saving" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+          </div>
+        </div>
 
-              <button type="submit" :disabled="passwordSaving" class="btn btn-primary">
-                {{ passwordSaving ? '修改中...' : '修改密码' }}
-              </button>
-            </form>
+        <!-- 转账设置 -->
+        <div v-show="activeTab === 'transfer'" class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">企业付款配置</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">转账最低金额</label>
+              <input v-model="form.transfer_min" type="number" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">转账最高金额</label>
+              <input v-model="form.transfer_max" type="number" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">转账手续费率 (%)</label>
+              <input v-model="form.transfer_fee" type="number" step="0.01" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">支付宝转账通道</label>
+              <select v-model="form.transfer_alipay" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">请选择</option>
+                <option value="alipay">支付宝官方</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">微信转账通道</label>
+              <select v-model="form.transfer_wxpay" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">请选择</option>
+                <option value="wxpay">微信支付</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <button @click="handleSave" :disabled="saving" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 快捷登录 -->
+        <div v-show="activeTab === 'oauth'" class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">快捷登录配置</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">支付宝登录</label>
+              <select v-model="form.login_alipay" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">QQ登录</label>
+              <select v-model="form.login_qq" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">微信登录</label>
+              <select v-model="form.login_wx" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <button @click="handleSave" :disabled="saving" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 通知设置 -->
+        <div v-show="activeTab === 'notice'" class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">消息提醒配置</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">订单通知邮箱</label>
+              <input v-model="form.notify_email" type="email" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">邮件通知</label>
+              <select v-model="form.email_notify" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">商户下单通知</label>
+              <select v-model="form.order_notify" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <button @click="handleSave" :disabled="saving" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ saving ? '保存中...' : '保存设置' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 账户设置 -->
+        <div v-show="activeTab === 'account'" class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">修改管理员密码</h3>
+          <div class="space-y-4 max-w-md">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">原密码</label>
+              <input v-model="passwordForm.old_pwd" type="password" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+              <input v-model="passwordForm.new_pwd" type="password" placeholder="至少8位" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+              <input v-model="passwordForm.confirm_pwd" type="password" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t">
+            <button @click="handlePasswordChange" :disabled="passwordSaving" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ passwordSaving ? '修改中...' : '修改密码' }}
+            </button>
           </div>
         </div>
       </div>
@@ -109,8 +287,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { saveConfig } from '@/api/admin'
+import { ref, reactive, onMounted } from 'vue'
+import { saveConfig, getConfig } from '@/api/admin'
+import { ElMessage } from 'element-plus'
 
 const activeTab = ref('site')
 
@@ -125,14 +304,37 @@ const tabs = [
 ]
 
 const form = reactive({
+  // 网站设置
   sitename: '',
+  title: '',
   localurl: '',
   apiurl: '',
+  email: '',
   kfqq: '',
   reg_open: '1',
+  // 支付设置
+  test_open: '0',
+  pay_success_page: '',
+  pay_error_page: '',
+  // 结算设置
   settle_money: '30',
+  settle_cycle: '1',
   settle_alipay: '1',
-  settle_wxpay: '1'
+  settle_wxpay: '1',
+  // 转账设置
+  transfer_min: '1',
+  transfer_max: '50000',
+  transfer_fee: '0',
+  transfer_alipay: '',
+  transfer_wxpay: '',
+  // 快捷登录
+  login_alipay: '0',
+  login_qq: '0',
+  login_wx: '0',
+  // 通知设置
+  notify_email: '',
+  email_notify: '0',
+  order_notify: '1'
 })
 
 const passwordForm = reactive({
@@ -146,15 +348,58 @@ const passwordSaving = ref(false)
 const successMsg = ref('')
 const errorMsg = ref('')
 
+async function loadConfig() {
+  try {
+    const res = await getConfig()
+    if (res.code === 0 && res.data) {
+      const data = res.data as Record<string, string>
+      // 网站设置
+      if (data.sitename) form.sitename = data.sitename
+      if (data.title) form.title = data.title
+      if (data.localurl) form.localurl = data.localurl
+      if (data.apiurl) form.apiurl = data.apiurl
+      if (data.email) form.email = data.email
+      if (data.kfqq) form.kfqq = data.kfqq
+      if (data.reg_open) form.reg_open = data.reg_open
+      // 支付设置
+      if (data.test_open) form.test_open = data.test_open
+      if (data.pay_success_page) form.pay_success_page = data.pay_success_page
+      if (data.pay_error_page) form.pay_error_page = data.pay_error_page
+      // 结算设置
+      if (data.settle_money) form.settle_money = data.settle_money
+      if (data.settle_cycle) form.settle_cycle = data.settle_cycle
+      if (data.settle_alipay) form.settle_alipay = data.settle_alipay
+      if (data.settle_wxpay) form.settle_wxpay = data.settle_wxpay
+      // 转账设置
+      if (data.transfer_min) form.transfer_min = data.transfer_min
+      if (data.transfer_max) form.transfer_max = data.transfer_max
+      if (data.transfer_fee) form.transfer_fee = data.transfer_fee
+      if (data.transfer_alipay) form.transfer_alipay = data.transfer_alipay
+      if (data.transfer_wxpay) form.transfer_wxpay = data.transfer_wxpay
+      // 快捷登录
+      if (data.login_alipay) form.login_alipay = data.login_alipay
+      if (data.login_qq) form.login_qq = data.login_qq
+      if (data.login_wx) form.login_wx = data.login_wx
+      // 通知设置
+      if (data.notify_email) form.notify_email = data.notify_email
+      if (data.email_notify) form.email_notify = data.email_notify
+      if (data.order_notify) form.order_notify = data.order_notify
+    }
+  } catch (error) {
+    console.error('加载配置失败:', error)
+  }
+}
+
 async function handleSave() {
   saving.value = true
   successMsg.value = ''
   errorMsg.value = ''
 
   try {
-    const res = await saveConfig(form)
+    const res = await saveConfig({ mod: activeTab.value, ...form })
     if (res.code === 0) {
       successMsg.value = '保存成功'
+      setTimeout(() => { successMsg.value = '' }, 3000)
     } else {
       errorMsg.value = res.msg || '保存失败'
     }
@@ -168,17 +413,17 @@ async function handleSave() {
 
 async function handlePasswordChange() {
   if (!passwordForm.old_pwd || !passwordForm.new_pwd || !passwordForm.confirm_pwd) {
-    errorMsg.value = '请填写所有密码字段'
+    ElMessage.warning('请填写所有密码字段')
     return
   }
 
   if (passwordForm.new_pwd !== passwordForm.confirm_pwd) {
-    errorMsg.value = '两次输入的新密码不一致'
+    ElMessage.error('两次输入的新密码不一致')
     return
   }
 
   if (passwordForm.new_pwd.length < 8) {
-    errorMsg.value = '新密码长度至少8位'
+    ElMessage.error('新密码长度至少8位')
     return
   }
 
@@ -189,7 +434,7 @@ async function handlePasswordChange() {
   try {
     const res = await saveConfig({ mod: 'account', ...passwordForm })
     if (res.code === 0) {
-      successMsg.value = '密码修改成功'
+      ElMessage.success('密码修改成功')
       passwordForm.old_pwd = ''
       passwordForm.new_pwd = ''
       passwordForm.confirm_pwd = ''
@@ -197,13 +442,17 @@ async function handlePasswordChange() {
         localStorage.setItem('admin_token', res.token)
       }
     } else {
-      errorMsg.value = res.msg || '密码修改失败'
+      ElMessage.error(res.msg || '密码修改失败')
     }
   } catch (error: any) {
     console.error('密码修改失败:', error)
-    errorMsg.value = error.message || '密码修改失败'
+    ElMessage.error(error.message || '密码修改失败')
   } finally {
     passwordSaving.value = false
   }
 }
+
+onMounted(() => {
+  loadConfig()
+})
 </script>

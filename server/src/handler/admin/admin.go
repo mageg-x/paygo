@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"paygo/src/config"
 	"paygo/src/model"
+	"paygo/src/plugin"
 	"paygo/src/service"
 
 	"github.com/gin-gonic/gin"
@@ -160,6 +162,33 @@ func (h *AdminHandler) SettleList(c *gin.Context) {
 	})
 }
 
+// AJAX: 结算列表
+func (h *AdminHandler) AjaxSettleList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	status := c.DefaultQuery("status", "-1")
+
+	query := config.DB.Model(&model.Settle{})
+	if status != "-1" {
+		query = query.Where("status = ?", status)
+	}
+
+	var settles []model.Settle
+	var total int64
+	query.Count(&total)
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&settles)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  settles,
+	})
+}
+
 // 转账列表
 func (h *AdminHandler) TransferList(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -200,23 +229,41 @@ func (h *AdminHandler) Settings(c *gin.Context) {
 // 保存设置
 func (h *AdminHandler) SaveSettings(c *gin.Context) {
 	var req struct {
-		Mod            string `json:"mod"`
-		OldPwd         string `json:"old_pwd"`
-		NewPwd         string `json:"new_pwd"`
-		ConfirmPwd     string `json:"confirm_pwd"`
-		Sitename       string `json:"sitename"`
-		Localurl       string `json:"localurl"`
-		Apiurl         string `json:"apiurl"`
-		Kfqq           string `json:"kfqq"`
-		RegOpen        string `json:"reg_open"`
-		SettleMoney    string `json:"settle_money"`
-		SettleAlipay   string `json:"settle_alipay"`
-		SettleWxpay    string `json:"settle_wxpay"`
+		Mod    string `json:"mod"`
+		OldPwd string `json:"old_pwd"`
+		NewPwd string `json:"new_pwd"`
+		ConfirmPwd string `json:"confirm_pwd"`
+		// 网站设置
+		Sitename string `json:"sitename"`
+		Title string `json:"title"`
+		Localurl string `json:"localurl"`
+		Apiurl string `json:"apiurl"`
+		Email string `json:"email"`
+		Kfqq string `json:"kfqq"`
+		RegOpen string `json:"reg_open"`
+		// 支付设置
+		TestOpen string `json:"test_open"`
+		PaySuccessPage string `json:"pay_success_page"`
+		PayErrorPage string `json:"pay_error_page"`
+		// 结算设置
+		SettleMoney string `json:"settle_money"`
+		SettleCycle string `json:"settle_cycle"`
+		SettleAlipay string `json:"settle_alipay"`
+		SettleWxpay string `json:"settle_wxpay"`
+		// 转账设置
+		TransferMin string `json:"transfer_min"`
+		TransferMax string `json:"transfer_max"`
+		TransferFee string `json:"transfer_fee"`
 		TransferAlipay string `json:"transfer_alipay"`
-		TransferWxpay  string `json:"transfer_wxpay"`
-		LoginAlipay    string `json:"login_alipay"`
-		LoginQq        string `json:"login_qq"`
-		LoginWx        string `json:"login_wx"`
+		TransferWxpay string `json:"transfer_wxpay"`
+		// 快捷登录
+		LoginAlipay string `json:"login_alipay"`
+		LoginQq string `json:"login_qq"`
+		LoginWx string `json:"login_wx"`
+		// 通知设置
+		NotifyEmail string `json:"notify_email"`
+		EmailNotify string `json:"email_notify"`
+		OrderNotify string `json:"order_notify"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -257,28 +304,48 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 		c.SetCookie("admin_token", newToken, 86400*30, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功", "token": newToken})
 		return
-	} else {
-		// 其他配置保存
-		cfgMap := map[string]string{
-			"sitename":        req.Sitename,
-			"localurl":        req.Localurl,
-			"apiurl":          req.Apiurl,
-			"kfqq":            req.Kfqq,
-			"reg_open":        req.RegOpen,
-			"settle_money":    req.SettleMoney,
-			"settle_alipay":   req.SettleAlipay,
-			"settle_wxpay":    req.SettleWxpay,
-			"transfer_alipay": req.TransferAlipay,
-			"transfer_wxpay":  req.TransferWxpay,
-			"login_alipay":    req.LoginAlipay,
-			"login_qq":        req.LoginQq,
-			"login_wx":        req.LoginWx,
-		}
+	}
 
-		for k, v := range cfgMap {
-			if v != "" {
-				h.authSvc.SaveConfig(k, v)
-			}
+	// 根据 mod 确定要保存的字段
+	cfgMap := make(map[string]string)
+
+	switch req.Mod {
+	case "site":
+		cfgMap["sitename"] = req.Sitename
+		cfgMap["title"] = req.Title
+		cfgMap["localurl"] = req.Localurl
+		cfgMap["apiurl"] = req.Apiurl
+		cfgMap["email"] = req.Email
+		cfgMap["kfqq"] = req.Kfqq
+		cfgMap["reg_open"] = req.RegOpen
+	case "pay":
+		cfgMap["test_open"] = req.TestOpen
+		cfgMap["pay_success_page"] = req.PaySuccessPage
+		cfgMap["pay_error_page"] = req.PayErrorPage
+	case "settle":
+		cfgMap["settle_money"] = req.SettleMoney
+		cfgMap["settle_cycle"] = req.SettleCycle
+		cfgMap["settle_alipay"] = req.SettleAlipay
+		cfgMap["settle_wxpay"] = req.SettleWxpay
+	case "transfer":
+		cfgMap["transfer_min"] = req.TransferMin
+		cfgMap["transfer_max"] = req.TransferMax
+		cfgMap["transfer_fee"] = req.TransferFee
+		cfgMap["transfer_alipay"] = req.TransferAlipay
+		cfgMap["transfer_wxpay"] = req.TransferWxpay
+	case "oauth":
+		cfgMap["login_alipay"] = req.LoginAlipay
+		cfgMap["login_qq"] = req.LoginQq
+		cfgMap["login_wx"] = req.LoginWx
+	case "notice":
+		cfgMap["notify_email"] = req.NotifyEmail
+		cfgMap["email_notify"] = req.EmailNotify
+		cfgMap["order_notify"] = req.OrderNotify
+	}
+
+	for k, v := range cfgMap {
+		if v != "" {
+			h.authSvc.SaveConfig(k, v)
 		}
 	}
 
@@ -292,6 +359,406 @@ func (h *AdminHandler) ChannelList(c *gin.Context) {
 
 	c.HTML(http.StatusOK, "admin/channel.html", gin.H{
 		"channels": channels,
+	})
+}
+
+// AJAX: 转账列表
+func (h *AdminHandler) AjaxTransferList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	status := c.DefaultQuery("status", "-1")
+	search := c.DefaultQuery("search", "")
+
+	query := config.DB.Model(&model.Transfer{})
+	if status != "-1" {
+		query = query.Where("status = ?", status)
+	}
+	if search != "" {
+		query = query.Where("biz_no LIKE ? OR account LIKE ? OR username LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+	}
+
+	var transfers []model.Transfer
+	var total int64
+	query.Count(&total)
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&transfers)
+
+	// 获取商户名称
+	type TransferWithUser struct {
+		model.Transfer
+		UserName string `json:"user_name"`
+	}
+	result := make([]TransferWithUser, len(transfers))
+	for i, t := range transfers {
+		result[i] = TransferWithUser{Transfer: t}
+		var user model.User
+		if err := config.DB.First(&user, t.UID).Error; err == nil {
+			result[i].UserName = user.Username
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  result,
+	})
+}
+
+// AJAX: 转账操作
+func (h *AdminHandler) AjaxTransferOp(c *gin.Context) {
+	action := c.PostForm("action")
+	bizNo := c.PostForm("biz_no")
+
+	switch action {
+	case "query":
+		// 查询转账状态
+		_, err := h.transferSvc.QueryTransfer(bizNo)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "查询成功"})
+		return
+	case "set_status":
+		// 修改转账状态
+		status, _ := strconv.Atoi(c.PostForm("status"))
+		result := c.PostForm("result")
+		err := h.transferSvc.UpdateTransferStatus(bizNo, status, result)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+	case "delete":
+		// 删除转账记录
+		result := config.DB.Where("biz_no = ?", bizNo).Delete(&model.Transfer{})
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+	case "refund":
+		// 退回转账
+		err := h.transferSvc.RefundTransfer(bizNo)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "退回成功"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+// AJAX: 通道列表
+func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
+	var channels []model.Channel
+	config.DB.Find(&channels)
+
+	// 获取插件名称
+	type ChannelWithPlugin struct {
+		model.Channel
+		PluginShowname string `json:"plugin_showname"`
+	}
+	result := make([]ChannelWithPlugin, len(channels))
+	for i, ch := range channels {
+		result[i] = ChannelWithPlugin{Channel: ch}
+		var plugin model.Plugin
+		if err := config.DB.First(&plugin, "name = ?", ch.Plugin).Error; err == nil {
+			result[i].PluginShowname = plugin.Showname
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+// AJAX: 通道操作
+func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
+	action := c.PostForm("action")
+
+	switch action {
+	case "add", "edit":
+		// 添加或编辑通道
+		var req struct {
+			ID        uint    `json:"id"`
+			Name      string  `json:"name"`
+			Plugin    string  `json:"plugin"`
+			Type      int     `json:"type"`
+			Mode      int     `json:"mode"`
+			Rate      float64 `json:"rate"`
+			Costrate  float64 `json:"costrate"`
+			Daytop    int     `json:"daytop"`
+			Paymin    string  `json:"paymin"`
+			Paymax    string  `json:"paymax"`
+			Apptype   string  `json:"apptype"`
+			Status    int     `json:"status"`
+			Config    string  `json:"config"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+			return
+		}
+
+		channel := model.Channel{
+			Name:     req.Name,
+			Plugin:   req.Plugin,
+			Type:     req.Type,
+			Mode:     req.Mode,
+			Rate:     req.Rate,
+			Costrate: req.Costrate,
+			Daytop:   req.Daytop,
+			Paymin:   req.Paymin,
+			Paymax:   req.Paymax,
+			Apptype:  req.Apptype,
+			Status:   req.Status,
+			Config:   req.Config,
+		}
+
+		var err error
+		if action == "edit" {
+			err = config.DB.Model(&model.Channel{}).Where("id = ?", req.ID).Updates(channel).Error
+		} else {
+			err = config.DB.Create(&channel).Error
+		}
+
+		if err != nil {
+			log.Printf("[channel_op_%s_failed] error=%s", action, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功"})
+		return
+
+	case "delete":
+		id, _ := strconv.Atoi(c.PostForm("id"))
+		result := config.DB.Delete(&model.Channel{}, "id = ?", id)
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+
+	case "set_status":
+		id, _ := strconv.Atoi(c.PostForm("id"))
+		status, _ := strconv.Atoi(c.PostForm("status"))
+		config.DB.Model(&model.Channel{}).Where("id = ?", id).Update("status", status)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+
+	case "get":
+		id, _ := strconv.Atoi(c.Query("id"))
+		var ch model.Channel
+		if err := config.DB.First(&ch, id).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "通道不存在"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": ch})
+		return
+
+	case "get_plugins":
+		// 获取某类型支持的插件列表
+		typ, _ := strconv.Atoi(c.Query("type"))
+		var plugins []model.Plugin
+		// 根据支付类型筛选插件
+		config.DB.Find(&plugins)
+		filtered := make([]model.Plugin, 0)
+		for _, p := range plugins {
+			// 简单判断：插件的types字段包含对应类型
+			// 1=支付宝, 2=微信, 3=QQ, 4=银行卡
+			switch typ {
+			case 1:
+				if len(p.Types) > 0 && (p.Types[0] == '1' || p.Types[0] == 'a' || p.Types[0] == 'A') {
+					filtered = append(filtered, p)
+				}
+			case 2:
+				if len(p.Types) > 0 && (p.Types[0] == '2' || p.Types[0] == 'w' || p.Types[0] == 'W') {
+					filtered = append(filtered, p)
+				}
+			default:
+				filtered = append(filtered, p)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": filtered})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+// AJAX: 插件列表 - 合并内置插件信息 + 数据库状态/配置
+func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
+	// 1. 获取所有内置插件信息
+	builtInPlugins := plugin.GetAllPluginsInfo()
+
+	// 2. 从数据库获取已保存的插件状态和配置
+	var dbPlugins []model.Plugin
+	config.DB.Find(&dbPlugins)
+	dbPluginMap := make(map[string]model.Plugin)
+	for _, p := range dbPlugins {
+		dbPluginMap[p.Name] = p
+	}
+
+	// 3. 合并数据
+	type PluginResponse struct {
+		Name       string `json:"name"`
+		Showname   string `json:"showname"`
+		Author     string `json:"author"`
+		Link       string `json:"link"`
+		Types      string `json:"types"`
+		Transtypes string `json:"transtypes"`
+		Status     int    `json:"status"`
+		Config     string `json:"config"`
+		Note       string `json:"note"` // 内置插件有说明
+		IsBuiltIn  bool   `json:"is_builtin"`
+	}
+
+	result := make([]PluginResponse, 0, len(builtInPlugins))
+	for _, p := range builtInPlugins {
+		dbPlugin, exists := dbPluginMap[p.Name]
+		status := 1  // 默认启用
+		cfg := "{}"
+		if exists {
+			status = dbPlugin.Status
+			if dbPlugin.Config != "" {
+				cfg = dbPlugin.Config
+			}
+		}
+		result = append(result, PluginResponse{
+			Name:       p.Name,
+			Showname:   p.Showname,
+			Author:     p.Author,
+			Link:       p.Link,
+			Types:      strings.Join(p.Types, ","),
+			Transtypes: strings.Join(p.Transtypes, ","),
+			Status:     status,
+			Config:     cfg,
+			Note:       p.Note,
+			IsBuiltIn:  true,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+// AJAX: 插件操作
+func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
+	action := c.PostForm("action")
+
+	switch action {
+	case "refresh":
+		// 刷新插件：同步内置插件到数据库
+		builtInPlugins := plugin.GetAllPluginsInfo()
+		synced := 0
+		for _, p := range builtInPlugins {
+			var existing model.Plugin
+			err := config.DB.First(&existing, "name = ?", p.Name).Error
+			if err != nil {
+				// 不存在，创建
+				newPlugin := model.Plugin{
+					Name:       p.Name,
+					Showname:   p.Showname,
+					Author:     p.Author,
+					Link:       p.Link,
+					Types:      strings.Join(p.Types, ","),
+					Transtypes: strings.Join(p.Transtypes, ","),
+					Status:     1,
+					Config:     "{}",
+				}
+				config.DB.Create(&newPlugin)
+				synced++
+			}
+		}
+		log.Printf("[插件刷新] 同步了 %d 个新插件", synced)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "刷新成功"})
+		return
+
+	case "set_status":
+		name := c.PostForm("name")
+		status, _ := strconv.Atoi(c.PostForm("status"))
+		result := config.DB.Model(&model.Plugin{}).Where("name = ?", name).Update("status", status)
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新失败"})
+			return
+		}
+		log.Printf("[插件状态更新] name=%s, status=%d", name, status)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+
+	case "get_config":
+		name := c.Query("name")
+		var dbPlugin model.Plugin
+		if err := config.DB.First(&dbPlugin, "name = ?", name).Error; err != nil {
+			// 数据库没有，尝试从内置插件获取
+			builtIn := plugin.GetHandler(name)
+			if builtIn == nil {
+				c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "插件不存在"})
+				return
+			}
+			info := builtIn.GetInfo()
+			c.JSON(http.StatusOK, gin.H{
+				"code": 0,
+				"data": gin.H{
+					"name":        name,
+					"showname":     info.Showname,
+					"author":      info.Author,
+					"types":       strings.Join(info.Types, ","),
+					"transtypes":  strings.Join(info.Transtypes, ","),
+					"inputs":       info.Inputs,
+					"config":      "{}",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": dbPlugin})
+		return
+
+	case "save_config":
+		name := c.PostForm("name")
+		cfg := c.PostForm("config")
+		if cfg == "" {
+			cfg = "{}"
+		}
+		result := config.DB.Model(&model.Plugin{}).Where("name = ?", name).Update("config", cfg)
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
+			return
+		}
+		log.Printf("[插件配置保存] name=%s", name)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "配置已保存"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+// AJAX: 获取配置
+func (h *AdminHandler) AjaxGetConfig(c *gin.Context) {
+	var configs []model.Config
+	config.DB.Find(&configs)
+
+	configMap := make(map[string]string)
+	for _, cfg := range configs {
+		configMap[cfg.K] = cfg.V
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": configMap,
 	})
 }
 

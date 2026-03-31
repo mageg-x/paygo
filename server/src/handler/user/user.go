@@ -62,7 +62,8 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	if err != nil {
 		log.Printf("[商户登录失败] IP: %s, UID: %d, 错误: %s", ip, req.UID, err.Error())
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": err.Error()})
+		// 业务逻辑错误返回 200 + code=1，而不是 401
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
 

@@ -66,10 +66,21 @@ func SetupRouter() *gin.Engine {
 			adminAuth.POST("/user/update", adminHandler.UpdateUser)
 			adminAuth.GET("/user/edit", adminHandler.EditUserPage)
 			adminAuth.POST("/order/op", adminHandler.AjaxOrderOp)
-			adminAuth.POST("/order/list", adminHandler.AjaxOrderList)
+			adminAuth.POST("/orders", adminHandler.AjaxOrderList)
 			adminAuth.POST("/settle/op", adminHandler.AjaxSettleOp)
+			adminAuth.GET("/settles", adminHandler.AjaxSettleList)
 			adminAuth.POST("/set/save", adminHandler.SaveSettings)
+			adminAuth.GET("/set/config", adminHandler.AjaxGetConfig)
 			adminAuth.GET("/stats", adminHandler.AjaxStats)
+			// 转账管理
+			adminAuth.GET("/transfer", adminHandler.AjaxTransferList)
+			adminAuth.POST("/transfer/op", adminHandler.AjaxTransferOp)
+			// 通道管理
+			adminAuth.GET("/channel", adminHandler.AjaxChannelList)
+			adminAuth.POST("/channel/op", adminHandler.AjaxChannelOp)
+			// 插件管理
+			adminAuth.GET("/plugin", adminHandler.AjaxPluginList)
+			adminAuth.POST("/plugin/op", adminHandler.AjaxPluginOp)
 		}
 
 		// 商户后台 API - 公开

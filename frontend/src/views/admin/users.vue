@@ -166,30 +166,30 @@
                 <div class="space-y-4">
                   <div>
                     <label class="form-label">用户组</label>
-                    <select v-model="userForm.gid" class="form-input">
+                    <select v-model="userForm.gid" class="form-input px-3">
                       <option v-for="g in groups" :key="g.gid" :value="g.gid">{{ g.name }}</option>
                     </select>
                   </div>
                   <div>
                     <label class="form-label">手机号</label>
-                    <input v-model="userForm.phone" type="text" class="form-input" placeholder="可留空">
+                    <input v-model="userForm.phone" type="text" class="form-input px-3" placeholder="可留空">
                   </div>
                   <div>
                     <label class="form-label">邮箱</label>
-                    <input v-model="userForm.email" type="email" class="form-input" placeholder="可留空">
+                    <input v-model="userForm.email" type="email" class="form-input px-3" placeholder="可留空">
                   </div>
                   <div>
                     <label class="form-label">登录密码</label>
-                    <input v-model="userForm.pwd" type="password" class="form-input"
+                    <input v-model="userForm.pwd" type="password" class="form-input px-3"
                       :placeholder="isEdit ? '留空则不修改' : '可留空'">
                   </div>
                   <div>
                     <label class="form-label">QQ</label>
-                    <input v-model="userForm.qq" type="text" class="form-input" placeholder="可留空">
+                    <input v-model="userForm.qq" type="text" class="form-input px-3" placeholder="可留空">
                   </div>
                   <div>
                     <label class="form-label">网站域名</label>
-                    <input v-model="userForm.url" type="text" class="form-input" placeholder="可留空">
+                    <input v-model="userForm.url" type="text" class="form-input px-3" placeholder="可留空">
                   </div>
                 </div>
               </div>
@@ -199,24 +199,22 @@
                 <div class="space-y-4">
                   <div>
                     <label class="form-label">结算方式</label>
-                    <select v-model="userForm.settle_id" class="form-input">
+                    <select v-model="userForm.settle_id" class="form-input px-3">
                       <option :value="1">支付宝</option>
                       <option :value="2">微信</option>
-                      <option :value="3">QQ钱包</option>
-                      <option :value="4">银行卡</option>
                     </select>
                   </div>
                   <div>
                     <label class="form-label">
                       结算账号 <span class="text-red-500">*</span>
                     </label>
-                    <input v-model="userForm.account" type="text" class="form-input" placeholder="必填">
+                    <input v-model="userForm.account" type="text" class="form-input px-3" placeholder="必填">
                   </div>
                   <div>
                     <label class="form-label">
                       结算姓名 <span class="text-red-500">*</span>
                     </label>
-                    <input v-model="userForm.username" type="text" class="form-input" placeholder="必填">
+                    <input v-model="userForm.username" type="text" class="form-input px-3" placeholder="必填">
                   </div>
                 </div>
               </div>
@@ -226,14 +224,14 @@
                 <div class="space-y-4">
                   <div>
                     <label class="form-label">手续费模式</label>
-                    <select v-model="userForm.mode" class="form-input">
+                    <select v-model="userForm.mode" class="form-input px-3">
                       <option :value="0">余额扣费</option>
                       <option :value="1">订单加费</option>
                     </select>
                   </div>
                   <div>
                     <label class="form-label">商户状态</label>
-                    <select v-model="userForm.status" class="form-input">
+                    <select v-model="userForm.status" class="form-input px-3">
                       <option :value="1">正常</option>
                       <option :value="0">禁用</option>
                       <option :value="2">待审核</option>
@@ -241,14 +239,14 @@
                   </div>
                   <div>
                     <label class="form-label">支付权限</label>
-                    <select v-model="userForm.pay" class="form-input">
+                    <select v-model="userForm.pay" class="form-input px-3">
                       <option :value="1">开启</option>
                       <option :value="0">关闭</option>
                     </select>
                   </div>
                   <div>
                     <label class="form-label">结算权限</label>
-                    <select v-model="userForm.settle" class="form-input">
+                    <select v-model="userForm.settle" class="form-input px-3">
                       <option :value="1">开启</option>
                       <option :value="0">关闭</option>
                     </select>
@@ -328,8 +326,8 @@ const groups = ref<Group[]>([
 ])
 
 const statusMap: Record<number, { text: string; class: string }> = {
-  0: { text: '正常', class: 'badge-success' },
-  1: { text: '禁用', class: 'badge-danger' },
+  0: { text: '禁用', class: 'badge-danger' },
+  1: { text: '正常', class: 'badge-success' },
   2: { text: '待审核', class: 'badge-warning' }
 }
 

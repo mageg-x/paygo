@@ -139,6 +139,20 @@ func GetAllPlugins() []string {
 	return names
 }
 
+// 获取所有插件的详细信息
+func GetAllPluginsInfo() []PluginInfo {
+	infos := make([]PluginInfo, 0, len(pluginRegistry))
+	for name, factory := range pluginRegistry {
+		p := factory()
+		if p != nil {
+			info := p.GetInfo()
+			info.Name = name // 确保使用注册的名称
+			infos = append(infos, info)
+		}
+	}
+	return infos
+}
+
 // 基础插件实现
 type BasePlugin struct {
 	info PluginInfo

@@ -1,5 +1,4 @@
 import axios, { type AxiosInstance, type AxiosResponse, type AxiosRequestConfig } from 'axios'
-import { ElMessage } from 'element-plus'
 import router from '@/router'
 
 // API方法类型
@@ -10,6 +9,7 @@ export interface ApiResponse<T = any> {
   token?: string
   count?: number
   user?: any
+  uid?: number
 }
 
 // 分页参数
@@ -71,7 +71,6 @@ axiosInstance.interceptors.response.use(
     const res = response.data
 
     if (res.code !== 0 && res.code !== undefined) {
-      ElMessage.error(res.msg || '请求失败')
       return Promise.reject(new Error(res.msg || '请求失败'))
     }
 
@@ -83,18 +82,15 @@ axiosInstance.interceptors.response.use(
       const isAdminRoute = error.config?.url?.includes('/admin/')
       if (isAdminRoute) {
         localStorage.removeItem('admin_token')
-        ElMessage.error('登录已过期，请重新登录')
         router.push('/admin/login')
       } else {
         localStorage.removeItem('user_token')
-        ElMessage.error('登录已过期，请重新登录')
         router.push('/user/login')
       }
       return Promise.reject(new Error('登录已过期'))
     }
 
     const msg = error.response?.data?.msg || error.message || '网络错误'
-    ElMessage.error(msg)
     return Promise.reject(new Error(msg))
   }
 )

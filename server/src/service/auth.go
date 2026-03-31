@@ -47,7 +47,7 @@ func (s *AuthService) UserLogin(uid uint, pwd string) (*model.User, string, erro
 		return nil, "", errors.New("用户不存在")
 	}
 
-	if user.Status != 0 {
+	if user.Status != 1 {
 		log.Printf("[user_login_failed] uid=%d, reason=user disabled, status=%d", uid, user.Status)
 		return nil, "", errors.New("账号已被禁用")
 	}
@@ -78,7 +78,7 @@ func (s *AuthService) UserKeyLogin(uid uint, key string) (*model.User, string, e
 		return nil, "", errors.New("用户不存在")
 	}
 
-	if user.Status != 0 {
+	if user.Status != 1 {
 		log.Printf("[user_key_login_failed] uid=%d, reason=user disabled, status=%d", uid, user.Status)
 		return nil, "", errors.New("账号已被禁用")
 	}

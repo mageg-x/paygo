@@ -91,8 +91,13 @@ export function settleOp(data: { action: string; id: number; [key: string]: any 
 }
 
 // 获取转账列表
-export function getTransferList(params: { page?: number; limit?: number }): Promise<ApiResponse> {
+export function getTransferList(params: { page?: number; limit?: number; status?: string; search?: string }): Promise<ApiResponse> {
   return request.get('/admin/transfer', { params })
+}
+
+// 转账操作
+export function transferOp(data: { action: string; biz_no: string; [key: string]: any }): Promise<ApiResponse> {
+  return request.post('/admin/transfer/op', data)
 }
 
 // 获取通道列表
@@ -100,14 +105,24 @@ export function getChannelList(): Promise<ApiResponse> {
   return request.get('/admin/channel')
 }
 
+// 通道操作
+export function channelOp(data: { action: string; [key: string]: any }): Promise<ApiResponse> {
+  return request.post('/admin/channel/op', data)
+}
+
 // 获取插件列表
 export function getPluginList(): Promise<ApiResponse> {
   return request.get('/admin/plugin')
 }
 
+// 插件操作
+export function pluginOp(data: { action: string; [key: string]: any }): Promise<ApiResponse> {
+  return request.post('/admin/plugin/op', data)
+}
+
 // 获取系统配置
-export function getConfig(mod?: string): Promise<ApiResponse> {
-  return request.get('/admin/config', { params: { mod } })
+export function getConfig(): Promise<ApiResponse> {
+  return request.get('/admin/set/config')
 }
 
 // 保存系统配置

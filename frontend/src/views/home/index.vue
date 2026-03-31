@@ -12,24 +12,18 @@
         <form @submit.prevent="handleSubmit" class="space-y-4">
           <div>
             <label class="form-label">商户ID</label>
-            <input v-model="form.pid" type="text" class="form-input" placeholder="请输入商户ID" required />
+            <input v-model="form.pid" type="text" class="form-input px-3" placeholder="请输入商户ID" required />
           </div>
 
           <div>
             <label class="form-label">支付方式</label>
             <div class="grid grid-cols-2 gap-2">
-              <button
-                v-for="pt in payTypes"
-                :key="pt.id"
-                type="button"
-                :class="[
-                  'p-3 rounded-lg border-2 text-center transition-all',
-                  form.type === String(pt.id)
-                    ? 'border-primary-500 bg-primary-50 text-primary-700'
-                    : 'border-gray-200 hover:border-gray-300'
-                ]"
-                @click="form.type = String(pt.id)"
-              >
+              <button v-for="pt in payTypes" :key="pt.id" type="button" :class="[
+                'p-3 rounded-lg border-2 text-center transition-all',
+                form.type === String(pt.id)
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-gray-200 hover:border-gray-300'
+              ]" @click="form.type = String(pt.id)">
                 <div class="text-lg">{{ pt.name }}</div>
               </button>
             </div>
@@ -37,34 +31,31 @@
 
           <div>
             <label class="form-label">商户订单号</label>
-            <input v-model="form.out_trade_no" type="text" class="form-input" placeholder="唯一订单号" required />
+            <input v-model="form.out_trade_no" type="text" class="form-input px-3" placeholder="唯一订单号" required />
           </div>
 
           <div>
             <label class="form-label">商品名称</label>
-            <input v-model="form.name" type="text" class="form-input" placeholder="商品名称" required />
+            <input v-model="form.name" type="text" class="form-input px-3" placeholder="商品名称" required />
           </div>
 
           <div>
             <label class="form-label">金额（元）</label>
-            <input v-model="form.money" type="number" step="0.01" class="form-input" placeholder="0.00" required />
+            <input v-model="form.money" type="number" step="0.01" class="form-input px-3" placeholder="0.00" required />
           </div>
 
           <div>
             <label class="form-label">回调地址</label>
-            <input v-model="form.notify_url" type="url" class="form-input" placeholder="http://" />
+            <input v-model="form.notify_url" type="url" class="form-input px-3" placeholder="http://" />
           </div>
 
           <div>
             <label class="form-label">返回地址</label>
-            <input v-model="form.return_url" type="url" class="form-input" placeholder="http://" />
+            <input v-model="form.return_url" type="url" class="form-input px-3" placeholder="http://" />
           </div>
 
-          <button
-            type="submit"
-            :disabled="loading"
-            class="w-full py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
-          >
+          <button type="submit" :disabled="loading"
+            class="w-full py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50">
             {{ loading ? '处理中...' : '提交支付' }}
           </button>
         </form>
