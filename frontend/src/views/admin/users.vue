@@ -72,25 +72,27 @@
                 <div class="text-xs text-gray-500 truncate" :title="user.url">{{ user.url || '-' }}</div>
               </td>
               <td class="whitespace-nowrap">
-                <span class="text-emerald-600 font-semibold">¥{{ user.money }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 font-semibold text-sm">
+                  ¥{{ user.money }}
+                </span>
               </td>
               <td>
-                <span :class="['badge', user.mode === 1 ? 'badge-warning' : 'badge-default']">
+                <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', user.mode === 1 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600']">
                   {{ user.mode === 1 ? '加费' : '减费' }}
                 </span>
               </td>
               <td>
                 <button @click="setStatus(user.uid, user.pay === 1 ? 0 : 1)" :class="[
-                  'badge cursor-pointer',
-                  user.pay === 1 ? 'badge-success' : 'badge-danger'
+                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-colors',
+                  user.pay === 1 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
                 ]">
                   {{ payMap[user.pay] }}
                 </button>
               </td>
               <td>
                 <button @click="setStatus(user.uid, user.settle === 1 ? 0 : 1)" :class="[
-                  'badge cursor-pointer',
-                  user.settle === 1 ? 'badge-success' : 'badge-danger'
+                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-colors',
+                  user.settle === 1 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
                 ]">
                   {{ settleMap[user.settle] }}
                 </button>

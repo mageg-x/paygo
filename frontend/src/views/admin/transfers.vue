@@ -10,21 +10,21 @@
 
     <!-- 统计卡片 -->
     <div class="grid grid-cols-4 gap-4">
-      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm border-l-4 border-l-slate-400">
         <div class="text-sm text-gray-500">总转账笔数</div>
-        <div class="text-2xl font-bold text-gray-900 mt-1">{{ total }}</div>
+        <div class="text-2xl font-bold text-slate-700 mt-1">{{ total }}</div>
       </div>
-      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm border-l-4 border-l-amber-400">
         <div class="text-sm text-gray-500">待处理</div>
-        <div class="text-2xl font-bold text-yellow-600 mt-1">{{ statusCount(0) }}</div>
+        <div class="text-2xl font-bold text-amber-600 mt-1">{{ statusCount(0) }}</div>
       </div>
-      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm border-l-4 border-l-emerald-400">
         <div class="text-sm text-gray-500">成功</div>
-        <div class="text-2xl font-bold text-green-600 mt-1">{{ statusCount(1) }}</div>
+        <div class="text-2xl font-bold text-emerald-600 mt-1">{{ statusCount(1) }}</div>
       </div>
-      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm border-l-4 border-l-rose-400">
         <div class="text-sm text-gray-500">失败</div>
-        <div class="text-2xl font-bold text-red-600 mt-1">{{ statusCount(2) }}</div>
+        <div class="text-2xl font-bold text-rose-600 mt-1">{{ statusCount(2) }}</div>
       </div>
     </div>
 
@@ -77,12 +77,12 @@
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1.5">
                   <SvgIcon :name="t.type === 'alipay' ? 'alipay' : 'wechatpay'" :size="16" />
-                  <span class="text-sm">{{ typeName(t.type) }}</span>
+                  <span class="text-sm font-medium" :class="t.type === 'alipay' ? 'text-blue-600' : 'text-green-600'">{{ typeName(t.type) }}</span>
                 </div>
               </td>
               <td class="px-4 py-3 text-gray-600">{{ t.account }}</td>
               <td class="px-4 py-3 text-gray-600">{{ t.username }}</td>
-              <td class="px-4 py-3 text-right font-semibold text-gray-900">￥{{ t.money }}</td>
+              <td class="px-4 py-3 text-right font-semibold text-emerald-600">￥{{ t.money }}</td>
               <td class="px-4 py-3 text-center">
                 <span
                   :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', statusClass(t.status)]">

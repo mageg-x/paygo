@@ -22,13 +22,16 @@
               <td>
                 <div class="flex items-center gap-1.5">
                   <SvgIcon :name="order.type === 1 ? 'alipay' : 'wechatpay'" :size="18" />
-                  <span class="text-sm">{{ order.type === 1 ? '支付宝' : '微信' }}</span>
+                  <span class="text-sm font-medium" :class="order.type === 1 ? 'text-blue-600' : 'text-green-600'">{{ order.type === 1 ? '支付宝' : '微信' }}</span>
                 </div>
               </td>
-              <td class="text-primary-600 font-medium">¥{{ order.money }}</td>
+              <td class="font-semibold text-emerald-600">¥{{ order.money }}</td>
               <td>
-                <span :class="['badge', order.status === 1 ? 'badge-success' : 'badge-warning']">
-                  {{ order.status === 1 ? '已支付' : '待支付' }}
+                <span v-if="order.status === 1" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>已支付
+                </span>
+                <span v-else class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 ring-1 ring-amber-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span>待支付
                 </span>
               </td>
               <td>{{ dayjs(order.addtime).format('YYYY-MM-DD HH:mm') }}</td>
