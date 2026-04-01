@@ -480,6 +480,7 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 		Rate            float64 `json:"rate"`
 		Status          int     `json:"status"`
 		Apptype         string  `json:"apptype"`
+		ApptypeNames    string  `json:"apptype_names"` // 支付方式名称列表
 		Daytop          int     `json:"daytop"`
 		Daystatus       int     `json:"daystatus"`
 		Paymin          string  `json:"paymin"`
@@ -488,7 +489,8 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 		Appwxa          int     `json:"appwxa"`
 		Costrate        float64 `json:"costrate"`
 		Config          string  `json:"config"`
-		PluginShowname   string  `json:"plugin_showname"`
+		PluginShowname  string  `json:"plugin_showname"`
+		PluginSelect    map[string]string `json:"plugin_select"` // 插件支持的支付方式
 	}
 
 	result := make([]ChannelResponse, len(channels))
@@ -511,12 +513,36 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 			Costrate: ch.Costrate,
 			Config:   ch.Config,
 		}
-		// 获取插件显示名
+
+		// 获取插件信息和支付方式名称
 		var plugin model.Plugin
+		var selectMap map[string]string
 		if err := config.DB.First(&plugin, "name = ?", ch.Plugin).Error; err == nil {
 			result[i].PluginShowname = plugin.Showname
-		} else if bp, ok := builtInMap[ch.Plugin]; ok {
+			// 如果数据库插件有 config，尝试解析 Select
+			if plugin.Config != "" {
+				// config 可能是 JSON 格式的 select 映射
+				// 这里简化处理，selectMap 为空时会用内置插件的
+			}
+		}
+		// 使用内置插件的 Select 映射
+		if bp, ok := builtInMap[ch.Plugin]; ok {
 			result[i].PluginShowname = bp.Showname
+			selectMap = bp.Select
+			result[i].PluginSelect = selectMap
+		}
+
+		// 转换 apptype 数字为名称
+		if ch.Apptype != "" && selectMap != nil {
+			names := make([]string, 0)
+			codes := strings.Split(ch.Apptype, ",")
+			for _, code := range codes {
+				code = strings.TrimSpace(code)
+				if name, ok := selectMap[code]; ok {
+					names = append(names, name)
+				}
+			}
+			result[i].ApptypeNames = strings.Join(names, ",")
 		}
 	}
 
@@ -652,16 +678,17 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 
 	// 3. 合并数据
 	type PluginResponse struct {
-		Name       string `json:"name"`
-		Showname   string `json:"showname"`
-		Author     string `json:"author"`
-		Link       string `json:"link"`
-		Types      string `json:"types"`
-		Transtypes string `json:"transtypes"`
-		Status     int    `json:"status"`
-		Config     string `json:"config"`
-		Note       string `json:"note"` // 内置插件有说明
-		IsBuiltIn  bool   `json:"is_builtin"`
+		Name       string            `json:"name"`
+		Showname   string            `json:"showname"`
+		Author     string            `json:"author"`
+		Link       string            `json:"link"`
+		Types      string            `json:"types"`
+		Transtypes string            `json:"transtypes"`
+		Status     int               `json:"status"`
+		Config     string            `json:"config"`
+		Note       string            `json:"note"` // 内置插件有说明
+		IsBuiltIn  bool              `json:"is_builtin"`
+		Select     map[string]string `json:"select"` // 支付方式选择
 	}
 
 	result := make([]PluginResponse, 0, len(builtInPlugins))
@@ -686,6 +713,7 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 			Config:     cfg,
 			Note:       p.Note,
 			IsBuiltIn:  true,
+			Select:     p.Select,
 		})
 	}
 
@@ -803,6 +831,92 @@ func (h *AdminHandler) AjaxGetConfig(c *gin.Context) {
 		"code": 0,
 		"data": configMap,
 	})
+}
+
+// AJAX: 邀请码列表
+func (h *AdminHandler) AjaxInviteCodeList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	search := c.Query("search")
+
+	query := config.DB.Model(&model.InviteCode{})
+	if search != "" {
+		query = query.Where("code LIKE ?", "%"+search+"%")
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var list []model.InviteCode
+	query.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  list,
+	})
+}
+
+// AJAX: 生成邀请码
+func (h *AdminHandler) AjaxInviteCodeGenerate(c *gin.Context) {
+	var req struct {
+		Num int `json:"num"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	if req.Num <= 0 || req.Num > 100 {
+		req.Num = 1
+	}
+
+	codes := make([]string, 0)
+	for i := 0; i < req.Num; i++ {
+		code := generateInviteCode()
+		invite := &model.InviteCode{
+			Code:    code,
+			Addtime: time.Now(),
+			Status:  0,
+		}
+		if err := config.DB.Create(invite).Error; err == nil {
+			codes = append(codes, code)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "成功生成 " + strconv.Itoa(len(codes)) + " 个邀请码",
+		"codes": codes,
+	})
+}
+
+// AJAX: 删除邀请码
+func (h *AdminHandler) AjaxInviteCodeDelete(c *gin.Context) {
+	var req struct {
+		ID uint `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	config.DB.Delete(&model.InviteCode{}, req.ID)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+}
+
+// 生成邀请码
+func generateInviteCode() string {
+	chars := "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+	result := make([]byte, 8)
+	for i := range result {
+		result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+	}
+	return string(result)
 }
 
 // 插件管理

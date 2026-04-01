@@ -124,7 +124,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getOrderList, orderOp } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import SvgIcon from '@/components/svgicon.vue'
 
@@ -188,14 +188,21 @@ async function fetchOrders() {
 
 async function handleOp(action: string, tradeNo: string) {
   const actionText = { refund: '退款', freeze: '冻结', unfreeze: '解冻' }[action] || '操作'
-  if (confirm(`确定要${actionText}该订单吗？`)) {
-    try {
-      const res = await orderOp({ action, trade_no: tradeNo })
-      ElMessage.success(res.msg || `${actionText}成功`)
-      fetchOrders()
-    } catch (error) {
-      console.error('操作失败:', error)
-    }
+  try {
+    await ElMessageBox.confirm(`确定要${actionText}该订单吗？`, '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  try {
+    const res = await orderOp({ action, trade_no: tradeNo })
+    ElMessage.success(res.msg || `${actionText}成功`)
+    fetchOrders()
+  } catch (error) {
+    console.error('操作失败:', error)
   }
 }
 

@@ -81,6 +81,10 @@ func SetupRouter() *gin.Engine {
 			// 插件管理
 			adminAuth.GET("/plugin", adminHandler.AjaxPluginList)
 			adminAuth.POST("/plugin/op", adminHandler.AjaxPluginOp)
+			// 邀请码管理
+			adminAuth.GET("/invitecode", adminHandler.AjaxInviteCodeList)
+			adminAuth.POST("/invitecode/generate", adminHandler.AjaxInviteCodeGenerate)
+			adminAuth.POST("/invitecode/delete", adminHandler.AjaxInviteCodeDelete)
 		}
 
 		// 商户后台 API - 公开

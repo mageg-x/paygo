@@ -47,7 +47,7 @@ import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { userLogout, getUserInfo } from '@/api/user'
 import { useAppStore } from '@/stores/app'
-import { Home, FileText, Wallet, Receipt, User, LogOut } from 'lucide-vue-next'
+import { Home, FileText, Wallet, Receipt, User, LogOut, Gift } from 'lucide-vue-next'
 
 const router = useRouter()
 const route = useRoute()
@@ -58,6 +58,7 @@ const menus = [
   { path: '/user/orders', name: '订单管理', icon: FileText },
   { path: '/user/settles', name: '结算管理', icon: Wallet },
   { path: '/user/records', name: '资金记录', icon: Receipt },
+  { path: '/user/invite', name: '邀请推广', icon: Gift },
   { path: '/user/profile', name: '资料管理', icon: User }
 ]
 

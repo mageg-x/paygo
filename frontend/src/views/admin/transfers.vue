@@ -171,7 +171,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getTransferList, transferOp } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
 
 const transfers = ref<any[]>([])
@@ -244,7 +244,15 @@ async function confirmSetStatus() {
 }
 
 async function handleRefund(bizNo: string) {
-  if (!confirm('确定要退回这笔转账吗？')) return
+  try {
+    await ElMessageBox.confirm('确定要退回这笔转账吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
   try {
     const res = await transferOp({ action: 'refund', biz_no: bizNo })
     ElMessage.success(res.msg || '退回成功')
@@ -255,7 +263,15 @@ async function handleRefund(bizNo: string) {
 }
 
 async function handleDelete(bizNo: string) {
-  if (!confirm('确定要删除这条记录吗？')) return
+  try {
+    await ElMessageBox.confirm('确定要删除这条记录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
   try {
     const res = await transferOp({ action: 'delete', biz_no: bizNo })
     ElMessage.success(res.msg || '删除成功')

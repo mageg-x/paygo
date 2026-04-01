@@ -104,11 +104,16 @@ func (s *AuthService) genUserToken(uid uint, key string) string {
 // 商户注册
 func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip string) (*model.User, error) {
 	// 检查注册是否开放
-	var regOpen model.Config
-	config.DB.First(&regOpen, "reg_open")
-	if regOpen.V != "1" && regOpen.V != "2" {
+	regOpen := s.GetConfig("reg_open")
+	if regOpen != "1" && regOpen != "2" {
 		log.Printf("[user_register_failed] email=%s, phone=%s, reason=registration closed")
 		return nil, errors.New("注册已关闭")
+	}
+
+	// 仅邀请注册模式必须有邀请码
+	if regOpen == "2" && inviteCode == "" {
+		log.Printf("[user_register_failed] email=%s, phone=%s, reason=invite code required")
+		return nil, errors.New("邀请码不能为空")
 	}
 
 	// 检查邮箱/手机是否已存在
@@ -134,10 +139,17 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 	var upid uint
 	if inviteCode != "" {
 		var invite model.InviteCode
-		result := config.DB.Where("code = ? AND status = 0", inviteCode).First(&invite)
-		if result.Error == nil {
-			upid = *invite.UID
+		err := config.DB.Where("code = ? AND status = 0", inviteCode).First(&invite).Error
+		if err != nil {
+			log.Printf("[user_register_failed] invite_code=%s, reason=invalid or used invite code")
+			return nil, errors.New("邀请码无效或已使用")
 		}
+		upid = *invite.UID
+		// 标记邀请码已使用
+		config.DB.Model(&invite).Updates(map[string]interface{}{
+			"status": 1,
+			"uid":    0, // 临时，保存后会被替换
+		})
 	}
 
 	// 生成密钥
@@ -146,6 +158,15 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 	// 密码哈希
 	pwdHash := md5.Sum([]byte(password + key))
 	pwdStr := hex.EncodeToString(pwdHash[:])
+
+	// 检查是否需要审核
+	userReview := s.GetConfig("user_review")
+	// user_review=1 表示需要审核，pay=2 表示待审核
+	// user_review=0 表示不需要审核，pay=1 表示正常
+	payStatus := 1
+	if userReview == "1" {
+		payStatus = 2 // 待审核
+	}
 
 	user := &model.User{
 		GID:      1, // 默认用户组
@@ -157,11 +178,11 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 		Phone:    phone,
 		Money:    0,
 		Cert:     0,
-		Pay:      1,
+		Pay:      payStatus, // 1=正常, 2=待审核
 		Settle:   1,
 		Keylogin: 1,
 		Apply:    1,
-		Status:   0,
+		Status:   1, // 账户状态：1正常
 		Refund:   1,
 		Transfer: 0,
 		Keytype:  0,
@@ -175,7 +196,12 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 		return nil, errors.New("创建用户失败")
 	}
 
-	log.Printf("[user_register_success] uid=%d, email=%s, phone=%s, ip=%s", user.UID, email, phone, ip)
+	// 更新邀请码关联的UID
+	if inviteCode != "" {
+		config.DB.Model(&model.InviteCode{}).Where("code = ?", inviteCode).Update("uid", user.UID)
+	}
+
+	log.Printf("[user_register_success] uid=%d, email=%s, phone=%s, ip=%s, pay_status=%d", user.UID, email, phone, ip, payStatus)
 	return user, nil
 }
 
@@ -237,7 +263,7 @@ func (s *AuthService) GenCode(scene, to string) (string, error) {
 // 获取配置
 func (s *AuthService) GetConfig(k string) string {
 	var cfg model.Config
-	result := config.DB.First(&cfg, k)
+	result := config.DB.Where("k = ?", k).First(&cfg)
 	if result.Error != nil {
 		return ""
 	}
@@ -259,7 +285,7 @@ func (s *AuthService) GetConfigs(keys []string) map[string]string {
 // 保存配置
 func (s *AuthService) SaveConfig(k, v string) error {
 	var cfg model.Config
-	result := config.DB.First(&cfg, k)
+	result := config.DB.Where("k = ?", k).First(&cfg)
 	if result.Error != nil {
 		// 不存在则创建
 		cfg = model.Config{K: k, V: v}

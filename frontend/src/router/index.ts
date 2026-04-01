@@ -61,6 +61,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/channels.vue')
       },
       {
+        path: 'invitecodes',
+        name: 'AdminInviteCodes',
+        component: () => import('@/views/admin/invitecodes.vue')
+      },
+      {
         path: 'plugins',
         name: 'AdminPlugins',
         component: () => import('@/views/admin/plugins.vue')
@@ -117,6 +122,11 @@ const routes: RouteRecordRaw[] = [
         path: 'profile',
         name: 'UserProfile',
         component: () => import('@/views/user/profile.vue')
+      },
+      {
+        path: 'invite',
+        name: 'UserInvite',
+        component: () => import('@/views/user/invite.vue')
       }
     ]
   }

@@ -93,6 +93,9 @@ func InitDB() {
 	// 设置自增ID从10000开始
 	setAutoIncrementStart(sqlDB)
 
+	// 初始化默认配置（必须在 loadAdminConfig 之前）
+	initDefaultConfig()
+
 	// 从数据库加载管理员配置
 	loadAdminConfig()
 
@@ -129,5 +132,39 @@ func setAutoIncrementStart(db *sql.DB) {
 	tables := []string{"user", "user_group", "record", "log", "order", "refundorder", "settle", "batch", "transfer", "pay_type", "plugin", "channel", "roll", "sub_channel", "config", "cache", "anounce", "reg_code", "invite_code", "risk", "domain", "blacklist", "ps_receiver", "ps_receiver2", "ps_order", "weixin"}
 	for _, table := range tables {
 		db.Exec("INSERT INTO sqlite_sequence (name, seq) VALUES (?, 9999) ON CONFLICT(name) DO UPDATE SET seq = 9999", table)
+	}
+}
+
+// 初始化默认配置
+func initDefaultConfig() {
+	defaultConfigs := []struct {
+		k string
+		v string
+	}{
+		{"reg_open", "1"},        // 注册开放
+		{"reg_pay", "0"},         // 注册收费关闭
+		{"reg_pay_price", "0"},   // 注册费用
+		{"user_review", "0"},     // 注册无需审核
+		{"test_open", "0"},        // 测试支付关闭
+		{"test_pay_uid", "1000"}, // 测试支付收款商户
+		{"sitename", "PayGo支付"},
+		{"title", "PayGo支付"},
+		{"localurl", "http://127.0.0.1:8080/"},
+		{"apiurl", "http://127.0.0.1:8080/"},
+		{"settle_money", "30"},
+		{"settle_cycle", "1"},
+		{"settle_alipay", "1"},
+		{"settle_wxpay", "1"},
+		{"transfer_min", "1"},
+		{"transfer_max", "50000"},
+		{"transfer_fee", "0"},
+	}
+
+	for _, cfg := range defaultConfigs {
+		var count int64
+		DB.Model(&model.Config{}).Where("k = ?", cfg.k).Count(&count)
+		if count == 0 {
+			DB.Create(&model.Config{K: cfg.k, V: cfg.v})
+		}
 	}
 }

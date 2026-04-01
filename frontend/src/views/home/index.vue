@@ -74,6 +74,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import SvgIcon from '@/components/svgicon.vue'
+import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const form = ref({
@@ -93,7 +94,7 @@ const payTypes = [
 
 async function handleSubmit() {
   if (!form.value.pid || !form.value.out_trade_no || !form.value.money) {
-    alert('请填写必填项')
+    ElMessage.warning('请填写必填项')
     return
   }
 
@@ -115,10 +116,10 @@ async function handleSubmit() {
         window.location.href = data.result.url
       }
     } else {
-      alert(data.msg)
+      ElMessage.error(data.msg || '支付提交失败')
     }
   } catch (error) {
-    alert('请求失败')
+    ElMessage.error('请求失败')
   } finally {
     loading.value = false
   }

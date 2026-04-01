@@ -91,6 +91,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { updateProfile, submitCertificate, getUserInfo } from '@/api/user'
 import { useAppStore } from '@/stores/app'
+import { ElMessage } from 'element-plus'
 
 const appStore = useAppStore()
 const activeTab = ref('info')
@@ -151,10 +152,10 @@ async function handleSaveProfile() {
   try {
     const res = await updateProfile({ username: user.username, phone: user.phone, qq: user.qq })
     if (res.code === 0) {
-      alert('保存成功')
+      ElMessage.success('保存成功')
     }
-  } catch (error) {
-    console.error('保存失败:', error)
+  } catch (error: any) {
+    ElMessage.error(error.message || '保存失败')
   } finally {
     saving.value = false
   }
@@ -164,11 +165,11 @@ async function handleCertSubmit() {
   try {
     const res = await submitCertificate(certForm)
     if (res.code === 0) {
-      alert('提交成功')
+      ElMessage.success('提交成功')
       user.cert = 1 // 待审核
     }
-  } catch (error) {
-    console.error('提交失败:', error)
+  } catch (error: any) {
+    ElMessage.error(error.message || '提交失败')
   }
 }
 </script>

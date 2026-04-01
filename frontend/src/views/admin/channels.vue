@@ -25,6 +25,7 @@
               <th class="px-4 py-3 text-left font-semibold text-gray-600">通道名称</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600">插件</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600">支付类型</th>
+              <th class="px-4 py-3 text-left font-semibold text-gray-600">支付方式</th>
               <th class="px-4 py-3 text-right font-semibold text-gray-600">费率</th>
               <th class="px-4 py-3 text-right font-semibold text-gray-600">成本</th>
               <th class="px-4 py-3 text-center font-semibold text-gray-600">限额</th>
@@ -42,6 +43,10 @@
                   <SvgIcon :name="ch.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
                   <span class="text-sm">{{ typeName(ch.type) }}</span>
                 </div>
+              </td>
+              <td class="px-4 py-3 text-gray-500 text-xs">
+                <div v-if="ch.apptype_names">{{ ch.apptype_names }}</div>
+                <div v-else class="text-gray-400">未配置</div>
               </td>
               <td class="px-4 py-3 text-right">
                 <span class="font-semibold text-green-600">{{ ch.rate }}%</span>
@@ -171,7 +176,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getChannelList, channelOp, getPluginList } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
 
 const channels = ref<any[]>([])
@@ -282,7 +287,15 @@ async function handleSave() {
 }
 
 async function handleDelete(id: number) {
-  if (!confirm('确定要删除这个通道吗？')) return
+  try {
+    await ElMessageBox.confirm('确定要删除这个通道吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
   try {
     const res = await channelOp({ action: 'delete', id })
     ElMessage.success(res.msg || '删除成功')

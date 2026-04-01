@@ -65,7 +65,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { userRegister } from '@/api/user'
-import { Mail, Phone, Lock, Ticket, Loader2, LogIn } from 'lucide-vue-next'
+import { Mail, Phone, Lock, Ticket, Loader2, LogIn, UserPlus } from 'lucide-vue-next'
 
 const router = useRouter()
 
@@ -82,11 +82,11 @@ async function handleRegister() {
   try {
     const res = await userRegister(form.value)
     if (res.code === 0) {
-      alert('注册成功')
+      ElMessage.success('注册成功，请登录')
       router.push('/user/login')
     }
-  } catch (error) {
-    console.error('注册失败:', error)
+  } catch (error: any) {
+    ElMessage.error(error.message || '注册失败')
   } finally {
     loading.value = false
   }

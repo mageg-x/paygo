@@ -129,3 +129,18 @@ export function getConfig(): Promise<ApiResponse> {
 export function saveConfig(data: Record<string, string>): Promise<ApiResponse<{ token?: string }>> {
   return request.post('/admin/set/save', data)
 }
+
+// 获取邀请码列表
+export function getInviteCodeList(params: { page?: number; limit?: number; search?: string }): Promise<ApiResponse> {
+  return request.get('/admin/invitecode', { params })
+}
+
+// 生成邀请码
+export function generateInviteCode(num: number): Promise<ApiResponse<{ codes: string[] }>> {
+  return request.post('/admin/invitecode/generate', { num })
+}
+
+// 删除邀请码
+export function deleteInviteCode(id: number): Promise<ApiResponse> {
+  return request.post('/admin/invitecode/delete', { id })
+}

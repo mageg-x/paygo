@@ -47,7 +47,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminLogout } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import { Home, Users, FileText, Wallet, ArrowLeftRight, Strikethrough, Puzzle, Settings, User, LogOut } from 'lucide-vue-next'
+import { Home, Users, FileText, Wallet, ArrowLeftRight, Strikethrough, Puzzle, Settings, User, LogOut, Ticket } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -60,6 +60,7 @@ const menus = [
   { path: '/admin/settles', name: '结算管理', icon: Wallet },
   { path: '/admin/transfers', name: '转账管理', icon: ArrowLeftRight },
   { path: '/admin/channels', name: '通道管理', icon: Strikethrough },
+  { path: '/admin/invitecodes', name: '邀请码', icon: Ticket },
   { path: '/admin/plugins', name: '插件管理', icon: Puzzle },
   { path: '/admin/settings', name: '系统设置', icon: Settings }
 ]

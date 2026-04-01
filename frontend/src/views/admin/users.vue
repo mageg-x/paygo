@@ -273,7 +273,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, computed } from 'vue'
 import { getUserList, addUser, updateUser, userOp, getUserEdit } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 
 interface User {
@@ -482,7 +482,15 @@ async function resetKey(uid: number) {
 }
 
 async function deleteUser(uid: number) {
-  if (!confirm('确定要删除该商户吗？')) return
+  try {
+    await ElMessageBox.confirm('确定要删除该商户吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
   try {
     await userOp({ action: 'delete', uid })
     ElMessage.success('删除成功')

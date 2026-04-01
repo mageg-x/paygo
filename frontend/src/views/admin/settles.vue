@@ -145,7 +145,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getSettleList, settleOp } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import SvgIcon from '@/components/svgicon.vue'
 
@@ -211,14 +211,21 @@ async function fetchSettles() {
 }
 
 async function handleApprove(id: number) {
-  if (confirm('确定同意该结算申请？')) {
-    try {
-      const res = await settleOp({ action: 'approve', id })
-      ElMessage.success(res.msg || '操作成功')
-      fetchSettles()
-    } catch (error) {
-      console.error('操作失败:', error)
-    }
+  try {
+    await ElMessageBox.confirm('确定同意该结算申请？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  try {
+    const res = await settleOp({ action: 'approve', id })
+    ElMessage.success(res.msg || '操作成功')
+    fetchSettles()
+  } catch (error) {
+    console.error('操作失败:', error)
   }
 }
 

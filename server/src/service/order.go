@@ -38,6 +38,22 @@ func (s *OrderService) GenTradeNo() string {
 func (s *OrderService) CreateOrder(uid uint, outTradeNo, name, notifyURL, returnURL, param string,
 	money float64, payType int, channelID int, ip string) (*model.Order, error) {
 
+	// 检查是否启用测试支付
+	testOpen := s.authSvc.GetConfig("test_open")
+	isTestPay := testOpen == "1"
+
+	// 测试支付时使用指定的收款商户
+	if isTestPay {
+		testPayUid := s.authSvc.GetConfig("test_pay_uid")
+		if testPayUid != "" {
+			uidStr := strings.TrimSpace(testPayUid)
+			if parsedUid, err := strconv.ParseUint(uidStr, 10, 32); err == nil {
+				uid = uint(parsedUid)
+				log.Printf("[test_pay] using test merchant uid=%d", uid)
+			}
+		}
+	}
+
 	// 获取商户信息
 	user, err := s.authSvc.GetUser(uid)
 	if err != nil {
