@@ -2,6 +2,7 @@
   <div>
     <h2 class="text-2xl font-bold text-gray-800 mb-6">商户中心</h2>
 
+    <!-- 统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
       <div class="card p-6 flex items-start gap-4 border-l-4 border-l-emerald-400">
         <div
@@ -29,8 +30,8 @@
           <Wallet class="w-6 h-6 text-white" />
         </div>
         <div>
-          <div class="text-gray-500 text-sm mb-1">累计收入</div>
-          <div class="text-2xl font-bold text-violet-600">¥{{ stats.total_money.toFixed(2) }}</div>
+          <div class="text-gray-500 text-sm mb-1">账户余额</div>
+          <div class="text-2xl font-bold text-violet-600">¥{{ (userInfo?.money || 0).toFixed(2) }}</div>
         </div>
       </div>
       <div class="card p-6 flex items-start gap-4 border-l-4 border-l-amber-400">
@@ -39,18 +40,33 @@
           <CheckCircle class="w-6 h-6 text-white" />
         </div>
         <div>
-          <div class="text-gray-500 text-sm mb-1">已结算</div>
-          <div class="text-2xl font-bold text-amber-600">¥{{ stats.settle_money.toFixed(2) }}</div>
+          <div class="text-gray-500 text-sm mb-1">累计收入</div>
+          <div class="text-2xl font-bold text-amber-600">¥{{ stats.total_money.toFixed(2) }}</div>
         </div>
       </div>
     </div>
 
+    <!-- 公告 -->
+    <div v-if="announces.length > 0" class="mb-6">
+      <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+        <div class="flex items-start gap-3">
+          <Volume2 class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div class="flex-1">
+            <div v-for="a in announces" :key="a.id" class="text-sm text-blue-800 mb-1" :style="{ color: a.color || '#333' }">
+              {{ a.content }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快捷操作 -->
     <div class="card mb-6">
       <div class="card-header">
         <h3 class="font-medium text-gray-800">快捷操作</h3>
       </div>
       <div class="card-body">
-        <div class="grid grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <router-link to="/user/orders"
             class="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl hover:from-blue-100 hover:to-blue-150 transition-all group text-center border border-blue-200/50">
             <div
@@ -67,13 +83,13 @@
             </div>
             <div class="font-medium text-amber-700">结算记录</div>
           </router-link>
-          <router-link to="/user/records"
-            class="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl hover:from-emerald-100 hover:to-emerald-150 transition-all group text-center border border-emerald-200/50">
+          <router-link to="/user/qrcode"
+            class="p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-xl hover:from-green-100 hover:to-green-150 transition-all group text-center border border-green-200/50">
             <div
-              class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-lg flex items-center justify-center mb-3 mx-auto group-hover:scale-110 transition-transform shadow-sm shadow-emerald-200">
-              <Receipt class="w-5 h-5 text-white" />
+              class="w-10 h-10 bg-gradient-to-br from-green-400 to-green-500 rounded-lg flex items-center justify-center mb-3 mx-auto group-hover:scale-110 transition-transform shadow-sm shadow-green-200">
+              <QrCode class="w-5 h-5 text-white" />
             </div>
-            <div class="font-medium text-emerald-700">资金记录</div>
+            <div class="font-medium text-green-700">收款二维码</div>
           </router-link>
           <router-link to="/user/profile"
             class="p-4 bg-gradient-to-br from-violet-50 to-violet-100 rounded-xl hover:from-violet-100 hover:to-violet-150 transition-all group text-center border border-violet-200/50">
@@ -87,9 +103,11 @@
       </div>
     </div>
 
+    <!-- 最新订单 -->
     <div class="card">
-      <div class="card-header">
+      <div class="card-header flex items-center justify-between">
         <h3 class="font-medium text-gray-800">最新订单</h3>
+        <router-link to="/user/orders" class="text-sm text-blue-600 hover:text-blue-700">查看全部</router-link>
       </div>
       <div class="card-body">
         <table class="table">
@@ -109,8 +127,8 @@
               <td>{{ order.name }}</td>
               <td>
                 <div class="flex items-center gap-1.5">
-                  <SvgIcon :name="order.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
-                  <span class="text-sm">{{ order.type === 1 ? '支付宝' : '微信' }}</span>
+                  <span class="text-lg">{{ order.type === 1 ? '💙' : order.type === 2 ? '🟢' : '💜' }}</span>
+                  <span class="text-sm">{{ typeName(order.type) }}</span>
                 </div>
               </td>
               <td class="text-primary-600 font-medium">¥{{ order.money }}</td>
@@ -132,20 +150,83 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { TrendingUp, ShoppingBag, Wallet, CheckCircle, FileText, Receipt, User } from 'lucide-vue-next'
-import SvgIcon from '@/components/svgicon.vue'
+import { ref, computed, onMounted } from 'vue'
+import { TrendingUp, ShoppingBag, Wallet, CheckCircle, FileText, Receipt, User, QrCode, Volume2 } from 'lucide-vue-next'
+import { getUserInfo, getUserOrders } from '@/api/user'
+import { useAppStore } from '@/stores/app'
+
+const appStore = useAppStore()
+const userInfo = computed(() => appStore.userInfo)
 
 const stats = ref({
   today_money: 0,
   today_count: 0,
   total_money: 0,
-  total_count: 0,
-  settle_money: 0
+  total_count: 0
 })
 
 const recentOrders = ref<any[]>([])
+const announces = ref<any[]>([])
+
+function typeName(type: number) {
+  const map: Record<number, string> = {
+    1: '支付宝',
+    2: '微信',
+    3: 'QQ钱包',
+    4: '银行卡'
+  }
+  return map[type] || '其他'
+}
+
+async function fetchData() {
+  try {
+    // 获取用户信息
+    const infoRes = await getUserInfo()
+    if (infoRes.code === 0 && infoRes.data) {
+      appStore.userLogin(appStore.userToken!, {
+        uid: infoRes.data.uid,
+        username: infoRes.data.username || '',
+        email: infoRes.data.email || '',
+        phone: infoRes.data.phone || '',
+        money: infoRes.data.money || 0,
+        status: infoRes.data.status || 1
+      })
+    }
+
+    // 获取订单列表
+    const orderRes = await getUserOrders({ page: 1, limit: 10 })
+    if (orderRes.code === 0) {
+      recentOrders.value = orderRes.data || []
+
+      // 计算统计
+      const today = new Date().toISOString().split('T')[0]
+      let todayMoney = 0
+      let todayCount = 0
+      let totalMoney = 0
+
+      orderRes.data?.forEach((o: any) => {
+        if (o.status === 1) {
+          totalMoney += parseFloat(o.money)
+          if (o.addtime && o.addtime.startsWith(today)) {
+            todayMoney += parseFloat(o.money)
+            todayCount++
+          }
+        }
+      })
+
+      stats.value = {
+        today_money: todayMoney,
+        today_count: todayCount,
+        total_money: totalMoney,
+        total_count: recentOrders.value.length
+      }
+    }
+  } catch (error) {
+    console.error('获取数据失败:', error)
+  }
+}
 
 onMounted(async () => {
+  await fetchData()
 })
 </script>

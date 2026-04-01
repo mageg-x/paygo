@@ -3,6 +3,12 @@ import type { RouteRecordRaw } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 
 const routes: RouteRecordRaw[] = [
+  // 安装向导
+  {
+    path: '/install',
+    name: 'Install',
+    component: () => import('@/views/install/index.vue')
+  },
   // 首页
   {
     path: '/',
@@ -71,9 +77,79 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/plugins.vue')
       },
       {
+        path: 'groups',
+        name: 'AdminGroups',
+        component: () => import('@/views/admin/groups.vue')
+      },
+      {
+        path: 'risk',
+        name: 'AdminRisk',
+        component: () => import('@/views/admin/risk.vue')
+      },
+      {
+        path: 'blacklist',
+        name: 'AdminBlacklist',
+        component: () => import('@/views/admin/blacklist.vue')
+      },
+      {
+        path: 'domains',
+        name: 'AdminDomains',
+        component: () => import('@/views/admin/domains.vue')
+      },
+      {
+        path: 'announces',
+        name: 'AdminAnnounces',
+        component: () => import('@/views/admin/announces.vue')
+      },
+      {
+        path: 'logs',
+        name: 'AdminLogs',
+        component: () => import('@/views/admin/logs.vue')
+      },
+      {
+        path: 'sso',
+        name: 'AdminSSO',
+        component: () => import('@/views/admin/sso.vue')
+      },
+      {
+        path: 'crons',
+        name: 'AdminCrons',
+        component: () => import('@/views/admin/crons.vue')
+      },
+      {
         path: 'settings',
         name: 'AdminSettings',
         component: () => import('@/views/admin/settings.vue')
+      },
+      {
+        path: 'export',
+        name: 'AdminExport',
+        component: () => import('@/views/admin/export.vue')
+      },
+      {
+        path: 'clean',
+        name: 'AdminClean',
+        component: () => import('@/views/admin/clean.vue')
+      },
+      {
+        path: 'wxkf',
+        name: 'AdminWxkf',
+        component: () => import('@/views/admin/wxkf.vue')
+      },
+      {
+        path: 'paytype',
+        name: 'AdminPayType',
+        component: () => import('@/views/admin/paytype.vue')
+      },
+      {
+        path: 'payroll',
+        name: 'AdminPayRoll',
+        component: () => import('@/views/admin/payroll.vue')
+      },
+      {
+        path: 'profit',
+        name: 'AdminProfit',
+        component: () => import('@/views/admin/profit.vue')
       }
     ]
   },
@@ -88,6 +164,12 @@ const routes: RouteRecordRaw[] = [
     path: '/user/register',
     name: 'UserRegister',
     component: () => import('@/views/user/register.vue')
+  },
+  // 找回密码
+  {
+    path: '/user/findpwd',
+    name: 'UserFindPwd',
+    component: () => import('@/views/user/findpwd.vue')
   },
   // 商户后台
   {
@@ -127,6 +209,36 @@ const routes: RouteRecordRaw[] = [
         path: 'invite',
         name: 'UserInvite',
         component: () => import('@/views/user/invite.vue')
+      },
+      {
+        path: 'qrcode',
+        name: 'UserQrcode',
+        component: () => import('@/views/user/qrcode.vue')
+      },
+      {
+        path: 'recharge',
+        name: 'UserRecharge',
+        component: () => import('@/views/user/recharge.vue')
+      },
+      {
+        path: 'groupbuy',
+        name: 'UserGroupbuy',
+        component: () => import('@/views/user/groupbuy.vue')
+      },
+      {
+        path: 'openid',
+        name: 'UserOpenid',
+        component: () => import('@/views/user/openid.vue')
+      },
+      {
+        path: 'help',
+        name: 'UserHelp',
+        component: () => import('@/views/user/help.vue')
+      },
+      {
+        path: 'transfer-add',
+        name: 'UserTransferAdd',
+        component: () => import('@/views/user/transfer-add.vue')
       }
     ]
   }

@@ -111,6 +111,8 @@
                     @click="openEditDialog(user)">编辑</button>
                   <button class="text-purple-600 hover:text-purple-800 text-xs font-medium px-1"
                     @click="resetKey(user.uid)">重置密钥</button>
+                  <button class="text-emerald-600 hover:text-emerald-800 text-xs font-medium px-1"
+                    @click="openMoneyDialog(user)">余额</button>
                   <button v-if="user.status === 0" class="text-amber-600 hover:text-amber-800 text-xs font-medium px-1"
                     @click="setStatus(user.uid, 1)">
                     禁用
@@ -266,6 +268,46 @@
           </div>
         </div>
       </div>
+
+      <!-- 余额操作弹窗 -->
+      <div v-if="moneyDialogVisible" class="modal-overlay" @click.self="moneyDialogVisible = false">
+        <div class="modal" style="max-width: 400px;">
+          <div class="modal-header">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">余额操作</h3>
+              <p class="text-sm text-gray-500 mt-0.5">商户：{{ moneyForm.username || '-' }}（ID：{{ moneyForm.uid }}）</p>
+            </div>
+            <button class="modal-close-btn" @click="moneyDialogVisible = false">&times;</button>
+          </div>
+
+          <div class="modal-body">
+            <div class="space-y-4">
+              <div>
+                <label class="form-label">操作类型</label>
+                <select v-model="moneyForm.type" class="form-input px-3">
+                  <option value="admin_add">充值（加款）</option>
+                  <option value="admin_sub">扣除（减款）</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label">金额</label>
+                <input v-model.number="moneyForm.money" type="number" step="0.01" min="0.01"
+                  class="form-input px-3" placeholder="请输入金额" />
+              </div>
+              <div>
+                <label class="form-label">备注</label>
+                <input v-model="moneyForm.remark" type="text"
+                  class="form-input px-3" placeholder="可选" />
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-outline" @click="moneyDialogVisible = false">取消</button>
+            <button class="btn btn-primary" @click="submitMoneyOp">确定</button>
+          </div>
+        </div>
+      </div>
     </Teleport>
   </div>
 </template>
@@ -308,6 +350,15 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('添加商户')
 const isEdit = ref(false)
 const editingUser = ref<User | null>(null)
+const moneyDialogVisible = ref(false)
+
+const moneyForm = reactive({
+  uid: 0,
+  username: '',
+  type: 'admin_add',
+  money: 0,
+  remark: ''
+})
 
 const userForm = reactive({
   gid: 1,
@@ -507,6 +558,35 @@ async function setStatus(uid: number, status: number) {
     fetchUsers()
   } catch (error) {
     console.error('更新状态失败:', error)
+  }
+}
+
+function openMoneyDialog(user: User) {
+  moneyForm.uid = user.uid
+  moneyForm.username = user.username || ''
+  moneyForm.type = 'admin_add'
+  moneyForm.money = 0
+  moneyForm.remark = ''
+  moneyDialogVisible.value = true
+}
+
+async function submitMoneyOp() {
+  if (moneyForm.money <= 0) {
+    ElMessage.warning('请输入正确的金额')
+    return
+  }
+  try {
+    await userOp({
+      action: 'recharge',
+      uid: moneyForm.uid,
+      type: moneyForm.type,
+      money: moneyForm.money
+    })
+    ElMessage.success('余额操作成功')
+    moneyDialogVisible.value = false
+    fetchUsers()
+  } catch (error: any) {
+    ElMessage.error(error.message || '操作失败')
   }
 }
 

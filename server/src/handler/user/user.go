@@ -1,6 +1,8 @@
 package user
 
 import (
+	"crypto/md5"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -412,4 +414,126 @@ func (h *UserHandler) AjaxRecordList(c *gin.Context) {
 		"count": total,
 		"data":  records,
 	})
+}
+
+// 找回密码 - 发送验证码
+func (h *UserHandler) FindPwdSendCode(c *gin.Context) {
+	var req struct {
+		Email string `json:"email" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	// 检查邮箱是否存在
+	var user model.User
+	if err := config.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "该邮箱未注册"})
+		return
+	}
+
+	// 生成验证码
+	code, err := h.authSvc.GenCode("findpwd", req.Email)
+	if err != nil || code == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "发送失败，请稍后重试"})
+		return
+	}
+
+	// TODO: 实际发送邮件
+	log.Printf("[找回密码验证码] 邮箱: %s, 验证码: %s", req.Email, code)
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "验证码已发送"})
+}
+
+// 找回密码 - 重置密码
+func (h *UserHandler) FindPwdReset(c *gin.Context) {
+	var req struct {
+		Email    string `json:"email" binding:"required"`
+		Code     string `json:"code" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	// 验证验证码
+	if !h.authSvc.VerifyCode("findpwd", req.Email, req.Code) {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "验证码错误或已过期"})
+		return
+	}
+
+	// 获取用户
+	var user model.User
+	if err := config.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "用户不存在"})
+		return
+	}
+
+	// 更新密码
+	pwdHash := fmt.Sprintf("%x", md5.Sum([]byte(req.Password+user.Key)))
+	if err := config.DB.Model(&user).Update("pwd", pwdHash).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "密码更新失败"})
+		return
+	}
+
+	log.Printf("[找回密码成功] 邮箱: %s", req.Email)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "密码重置成功"})
+}
+
+// AJAX: 获取用户组列表(商户端)
+func (h *UserHandler) AjaxGroupList(c *gin.Context) {
+	var groups []model.Group
+	if err := config.DB.Order("sort ASC").Find(&groups).Error; err != nil {
+		log.Printf("[获取用户组列表失败] uid=%d, error=%s", c.GetInt("uid"), err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "获取用户组列表失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": groups})
+}
+
+// AJAX: 用户组转让记录
+func (h *UserHandler) AjaxGroupTransferList(c *gin.Context) {
+	uid := c.GetInt("uid")
+	var transfers []model.UserGroupTransfer
+	if err := config.DB.Where("from_uid = ? OR to_uid = ?", uid, uid).Order("id DESC").Find(&transfers).Error; err != nil {
+		log.Printf("[获取用户组转让记录失败] uid=%d, error=%s", uid, err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "获取转让记录失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": transfers})
+}
+
+// AJAX: 创建用户组转让
+func (h *UserHandler) AjaxGroupTransferCreate(c *gin.Context) {
+	uid := c.GetInt("uid")
+	var req struct {
+		TargetUID int     `json:"target_uid" binding:"required"`
+		GroupID   uint    `json:"group_id" binding:"required"`
+		Price     float64 `json:"price"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[用户组转让参数错误] uid=%d, error=%s", uid, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	log.Printf("[用户组转让] from_uid=%d, to_uid=%d, group_id=%d, price=%.2f", uid, req.TargetUID, req.GroupID, req.Price)
+
+	// 创建转让记录
+	transfer := model.UserGroupTransfer{
+		FromUID:  uint(uid),
+		ToUID:    uint(req.TargetUID),
+		GroupID:  req.GroupID,
+		Price:    req.Price,
+		Status:   0,
+	}
+	if err := config.DB.Create(&transfer).Error; err != nil {
+		log.Printf("[用户组转让创建记录失败] from_uid=%d, to_uid=%d, error=%s", uid, req.TargetUID, err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "创建转让记录失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "转让请求已提交"})
 }

@@ -134,10 +134,51 @@
             <!-- 配置输入 -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">插件配置 (JSON)</label>
-              <textarea v-model="pluginConfig"
-                class="w-full h-32 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                placeholder='{"key": "value"}'></textarea>
-              <p class="text-xs text-gray-400 mt-1">请输入有效的 JSON 格式配置</p>
+              <JsonEditor v-model="pluginConfig" placeholder='{"appid": "xxx", "appkey": "xxx"}' />
+            </div>
+
+            <!-- 证书上传（仅微信支付需要） -->
+            <div v-if="currentPlugin?.name === 'wxpay'" class="bg-amber-50 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <div class="font-medium text-amber-800">微信支付证书</div>
+                  <div class="text-xs text-amber-600 mt-1">微信退款、转账等功能需要上传证书</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <input type="file" ref="certInput" accept=".pem,.cert,.key,.p12,.pfx" @change="handleCertSelect"
+                  class="hidden" />
+                <button @click="$refs.certInput.click()"
+                  class="px-4 py-2 text-sm bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors">
+                  选择证书文件
+                </button>
+                <span class="text-sm text-amber-700">{{ certFileName || '未选择文件' }}</span>
+              </div>
+              <div v-if="certFileName" class="mt-3 p-2 bg-white rounded border border-amber-200">
+                <div class="text-xs text-gray-500">证书路径（自动填入配置）:</div>
+                <div class="font-mono text-sm text-gray-700 mt-1">{{ certPath }}</div>
+              </div>
+              <div v-if="uploading" class="mt-3 text-sm text-amber-600">
+                上传中...
+              </div>
+            </div>
+
+            <!-- 配置帮助 -->
+            <div v-if="currentPlugin?.note" class="bg-blue-50 rounded-lg p-4 text-sm">
+              <div class="font-medium text-blue-700 mb-2">配置说明</div>
+              <div class="text-blue-600 prose prose-sm max-w-none" v-html="currentPlugin.note"></div>
+            </div>
+
+            <!-- 配置参数说明 -->
+            <div v-if="currentPlugin?.inputs && Object.keys(currentPlugin.inputs).length > 0" class="bg-gray-50 rounded-lg p-4">
+              <div class="font-medium text-gray-700 mb-2">参数说明</div>
+              <div class="space-y-2">
+                <div v-for="(input, key) in currentPlugin.inputs" :key="key" class="flex items-start gap-2 text-sm">
+                  <span class="font-mono text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded min-w-[80px]">{{ key }}</span>
+                  <span class="text-gray-500">{{ input.name }}</span>
+                  <span v-if="input.note" class="text-gray-400 text-xs">({{ input.note }})</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -155,14 +196,20 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import request from '@/api/request'
 import { getPluginList, pluginOp } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
+import JsonEditor from '@/components/json-editor.vue'
 
 const plugins = ref<any[]>([])
 const showConfigModal = ref(false)
 const currentPlugin = ref<any>(null)
 const pluginConfig = ref('')
+const certInput = ref<HTMLInputElement | null>(null)
+const certFileName = ref('')
+const certPath = ref('')
+const uploading = ref(false)
 
 function getPluginBgClass(types: string) {
   if (types?.includes('支付宝')) return 'bg-blue-50'
@@ -208,6 +255,8 @@ async function toggleStatus(p: any) {
 function showConfig(p: any) {
   currentPlugin.value = p
   pluginConfig.value = p.config || '{}'
+  certFileName.value = ''
+  certPath.value = ''
   showConfigModal.value = true
 }
 
@@ -230,6 +279,50 @@ async function savePluginConfig() {
     fetchPlugins()
   } catch (error) {
     console.error('保存失败:', error)
+  }
+}
+
+async function handleCertSelect(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  certFileName.value = file.name
+  uploading.value = true
+
+  const formData = new FormData()
+  formData.append('cert', file)
+
+  try {
+    const res = await request.post('/admin/upload/cert', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    if (res.code === 0) {
+      certPath.value = res.data.path
+      ElMessage.success('证书上传成功')
+
+      // 自动填入配置
+      try {
+        const config = JSON.parse(pluginConfig.value || '{}')
+        if (file.name.endsWith('.p12') || file.name.endsWith('.pfx')) {
+          config.cert_path = res.data.path
+        } else if (file.name.endsWith('.pem') || file.name.endsWith('.cert')) {
+          config.cert_path = res.data.path
+        } else if (file.name.endsWith('.key')) {
+          config.key_path = res.data.path
+        }
+        pluginConfig.value = JSON.stringify(config, null, 2)
+      } catch {
+        pluginConfig.value = JSON.stringify({ cert_path: res.data.path }, null, 2)
+      }
+    } else {
+      ElMessage.error(res.msg || '上传失败')
+    }
+  } catch (error) {
+    console.error('证书上传失败:', error)
+    ElMessage.error('证书上传失败')
+  } finally {
+    uploading.value = false
   }
 }
 

@@ -2,9 +2,11 @@ package admin
 
 import (
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -241,21 +243,33 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 		Email string `json:"email"`
 		Kfqq string `json:"kfqq"`
 		RegOpen string `json:"reg_open"`
+		SiteKeywords string `json:"site_keywords"`
+		SiteDescription string `json:"site_description"`
+		CdnUrl string `json:"cdn_url"`
+		UserVerification string `json:"user_verification"`
 		// 支付设置
 		TestOpen string `json:"test_open"`
 		PaySuccessPage string `json:"pay_success_page"`
 		PayErrorPage string `json:"pay_error_page"`
+		PayMinMoney string `json:"pay_min_money"`
+		PayMaxMoney string `json:"pay_max_money"`
+		PayBlockGoods string `json:"pay_block_goods"`
+		PayFeeRate string `json:"pay_fee_rate"`
+		InviteCashback string `json:"invite_cashback"`
+		QrcodeEnabled string `json:"qrcode_enabled"`
 		// 结算设置
 		SettleMoney string `json:"settle_money"`
 		SettleCycle string `json:"settle_cycle"`
 		SettleAlipay string `json:"settle_alipay"`
 		SettleWxpay string `json:"settle_wxpay"`
+		SettleAutoTransfer string `json:"settle_auto_transfer"`
 		// 转账设置
 		TransferMin string `json:"transfer_min"`
 		TransferMax string `json:"transfer_max"`
 		TransferFee string `json:"transfer_fee"`
 		TransferAlipay string `json:"transfer_alipay"`
 		TransferWxpay string `json:"transfer_wxpay"`
+		TransferShowName string `json:"transfer_show_name"`
 		// 快捷登录
 		LoginAlipay string `json:"login_alipay"`
 		LoginQq string `json:"login_qq"`
@@ -264,6 +278,30 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 		NotifyEmail string `json:"notify_email"`
 		EmailNotify string `json:"email_notify"`
 		OrderNotify string `json:"order_notify"`
+		// 实名认证
+		CertificateRequired string `json:"certificate_required"`
+		CertificateTypes string `json:"certificate_types"`
+		// IP类型
+		IpType string `json:"ip_type"`
+		// 代理设置
+		ProxyEnabled string `json:"proxy_enabled"`
+		ProxyHost string `json:"proxy_host"`
+		ProxyPort string `json:"proxy_port"`
+		ProxyUser string `json:"proxy_user"`
+		ProxyPass string `json:"proxy_pass"`
+		// 邮件设置
+		MailSmtpHost string `json:"mail_smtp_host"`
+		MailSmtpPort string `json:"mail_smtp_port"`
+		MailUsername string `json:"mail_username"`
+		MailPassword string `json:"mail_password"`
+		MailFrom string `json:"mail_from"`
+		// 短信设置
+		SmsEnabled string `json:"sms_enabled"`
+		SmsProvider string `json:"sms_provider"`
+		SmsAppid string `json:"sms_appid"`
+		SmsAppkey string `json:"sms_appkey"`
+		// 公告
+		GonggaoContent string `json:"gonggao_content"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -318,21 +356,33 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 		cfgMap["email"] = req.Email
 		cfgMap["kfqq"] = req.Kfqq
 		cfgMap["reg_open"] = req.RegOpen
+		cfgMap["site_keywords"] = req.SiteKeywords
+		cfgMap["site_description"] = req.SiteDescription
+		cfgMap["cdn_url"] = req.CdnUrl
+		cfgMap["user_verification"] = req.UserVerification
 	case "pay":
 		cfgMap["test_open"] = req.TestOpen
 		cfgMap["pay_success_page"] = req.PaySuccessPage
 		cfgMap["pay_error_page"] = req.PayErrorPage
+		cfgMap["pay_min_money"] = req.PayMinMoney
+		cfgMap["pay_max_money"] = req.PayMaxMoney
+		cfgMap["pay_block_goods"] = req.PayBlockGoods
+		cfgMap["pay_fee_rate"] = req.PayFeeRate
+		cfgMap["invite_cashback"] = req.InviteCashback
+		cfgMap["qrcode_enabled"] = req.QrcodeEnabled
 	case "settle":
 		cfgMap["settle_money"] = req.SettleMoney
 		cfgMap["settle_cycle"] = req.SettleCycle
 		cfgMap["settle_alipay"] = req.SettleAlipay
 		cfgMap["settle_wxpay"] = req.SettleWxpay
+		cfgMap["settle_auto_transfer"] = req.SettleAutoTransfer
 	case "transfer":
 		cfgMap["transfer_min"] = req.TransferMin
 		cfgMap["transfer_max"] = req.TransferMax
 		cfgMap["transfer_fee"] = req.TransferFee
 		cfgMap["transfer_alipay"] = req.TransferAlipay
 		cfgMap["transfer_wxpay"] = req.TransferWxpay
+		cfgMap["transfer_show_name"] = req.TransferShowName
 	case "oauth":
 		cfgMap["login_alipay"] = req.LoginAlipay
 		cfgMap["login_qq"] = req.LoginQq
@@ -341,6 +391,30 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 		cfgMap["notify_email"] = req.NotifyEmail
 		cfgMap["email_notify"] = req.EmailNotify
 		cfgMap["order_notify"] = req.OrderNotify
+	case "certificate":
+		cfgMap["certificate_required"] = req.CertificateRequired
+		cfgMap["certificate_types"] = req.CertificateTypes
+	case "iptype":
+		cfgMap["ip_type"] = req.IpType
+	case "proxy":
+		cfgMap["proxy_enabled"] = req.ProxyEnabled
+		cfgMap["proxy_host"] = req.ProxyHost
+		cfgMap["proxy_port"] = req.ProxyPort
+		cfgMap["proxy_user"] = req.ProxyUser
+		cfgMap["proxy_pass"] = req.ProxyPass
+	case "mail":
+		cfgMap["mail_smtp_host"] = req.MailSmtpHost
+		cfgMap["mail_smtp_port"] = req.MailSmtpPort
+		cfgMap["mail_username"] = req.MailUsername
+		cfgMap["mail_password"] = req.MailPassword
+		cfgMap["mail_from"] = req.MailFrom
+	case "sms":
+		cfgMap["sms_enabled"] = req.SmsEnabled
+		cfgMap["sms_provider"] = req.SmsProvider
+		cfgMap["sms_appid"] = req.SmsAppid
+		cfgMap["sms_appkey"] = req.SmsAppkey
+	case "gonggao":
+		cfgMap["gonggao_content"] = req.GonggaoContent
 	}
 
 	for k, v := range cfgMap {
@@ -821,6 +895,29 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 func (h *AdminHandler) AjaxGetConfig(c *gin.Context) {
 	var configs []model.Config
 	config.DB.Find(&configs)
+
+	configMap := make(map[string]string)
+	for _, cfg := range configs {
+		configMap[cfg.K] = cfg.V
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": configMap,
+	})
+}
+
+// AJAX: 根据key数组获取配置
+func (h *AdminHandler) AjaxGetSettings(c *gin.Context) {
+	keysStr := c.Query("keys")
+	if keysStr == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "keys参数不能为空"})
+		return
+	}
+
+	keys := strings.Split(keysStr, ",")
+	var configs []model.Config
+	config.DB.Where("k IN ?", keys).Find(&configs)
 
 	configMap := make(map[string]string)
 	for _, cfg := range configs {
@@ -1330,4 +1427,825 @@ func (h *AdminHandler) AjaxStats(c *gin.Context) {
 			"user_count":            userCount,
 		},
 	})
+}
+
+// AJAX: 风控记录列表
+func (h *AdminHandler) AjaxRiskList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	uid := c.DefaultQuery("uid", "")
+	uidInt, _ := strconv.Atoi(uid)
+
+	query := config.DB.Model(&model.Risk{})
+	if uidInt > 0 {
+		query = query.Where("uid = ?", uidInt)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var list []model.Risk
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&list)
+
+	// 获取商户名称
+	type RiskWithUser struct {
+		model.Risk
+		UserName string `json:"user_name"`
+	}
+	result := make([]RiskWithUser, len(list))
+	for i, r := range list {
+		result[i] = RiskWithUser{Risk: r}
+		var user model.User
+		if err := config.DB.First(&user, r.UID).Error; err == nil {
+			result[i].UserName = user.Username
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  result,
+	})
+}
+
+// AJAX: 风控操作
+func (h *AdminHandler) AjaxRiskOp(c *gin.Context) {
+	var req struct {
+		Action string `json:"action"`
+		ID     uint   `json:"id"`
+		Status int    `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "set_status":
+		config.DB.Model(&model.Risk{}).Where("id = ?", req.ID).Update("status", req.Status)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+// AJAX: 黑名单列表
+func (h *AdminHandler) AjaxBlacklistList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	blackType := c.DefaultQuery("type", "")
+
+	query := config.DB.Model(&model.Blacklist{})
+	if blackType != "" {
+		query = query.Where("type = ?", blackType)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var list []model.Blacklist
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&list)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  list,
+	})
+}
+
+// AJAX: 黑名单操作
+func (h *AdminHandler) AjaxBlacklistOp(c *gin.Context) {
+	var req struct {
+		Action  string `json:"action"`
+		ID      uint   `json:"id"`
+		Type    int    `json:"type"`
+		Content string `json:"content"`
+		Remark  string `json:"remark"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "add":
+		black := &model.Blacklist{
+			Type:    req.Type,
+			Content: req.Content,
+			Remark:  req.Remark,
+			Addtime: time.Now(),
+		}
+		if err := config.DB.Create(black).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "添加失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "添加成功"})
+		return
+
+	case "delete":
+		config.DB.Delete(&model.Blacklist{}, req.ID)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+// AJAX: 域名授权列表
+func (h *AdminHandler) AjaxDomainList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	uid := c.DefaultQuery("uid", "")
+	uidInt, _ := strconv.Atoi(uid)
+
+	query := config.DB.Model(&model.Domain{})
+	if uidInt > 0 {
+		query = query.Where("uid = ?", uidInt)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var list []model.Domain
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&list)
+
+	// 获取商户名称
+	type DomainWithUser struct {
+		model.Domain
+		UserName string `json:"user_name"`
+	}
+	result := make([]DomainWithUser, len(list))
+	for i, d := range list {
+		result[i] = DomainWithUser{Domain: d}
+		var user model.User
+		if err := config.DB.First(&user, d.UID).Error; err == nil {
+			result[i].UserName = user.Username
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  result,
+	})
+}
+
+// AJAX: 域名授权操作
+func (h *AdminHandler) AjaxDomainOp(c *gin.Context) {
+	var req struct {
+		Action string `json:"action"`
+		ID     uint   `json:"id"`
+		UID    uint   `json:"uid"`
+		Domain string `json:"domain"`
+		Status int    `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "add":
+		domain := &model.Domain{
+			UID:     req.UID,
+			Domain:  req.Domain,
+			Status:  1,
+			Addtime: func() *time.Time { t := time.Now(); return &t }(),
+		}
+		if err := config.DB.Create(domain).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "添加失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "添加成功"})
+		return
+
+	case "delete":
+		config.DB.Delete(&model.Domain{}, req.ID)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+
+	case "set_status":
+		config.DB.Model(&model.Domain{}).Where("id = ?", req.ID).Update("status", req.Status)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+// AJAX: 公告列表
+func (h *AdminHandler) AjaxAnounceList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+
+	var total int64
+	config.DB.Model(&model.Anounce{}).Count(&total)
+
+	var list []model.Anounce
+	config.DB.Offset((page - 1) * pageSize).Limit(pageSize).Order("sort DESC, id DESC").Find(&list)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  list,
+	})
+}
+
+// AJAX: 公告操作
+func (h *AdminHandler) AjaxAnounceOp(c *gin.Context) {
+	var req struct {
+		Action  string `json:"action"`
+		ID      uint   `json:"id"`
+		Content string `json:"content"`
+		Color   string `json:"color"`
+		Sort    int    `json:"sort"`
+		Status  int    `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "add":
+		anounce := &model.Anounce{
+			Content: req.Content,
+			Color:   req.Color,
+			Sort:    req.Sort,
+			Status:  req.Status,
+			Addtime: time.Now(),
+		}
+		if err := config.DB.Create(anounce).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "添加失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "添加成功"})
+		return
+
+	case "edit":
+		updates := map[string]interface{}{
+			"content": req.Content,
+			"color":   req.Color,
+			"sort":    req.Sort,
+			"status":  req.Status,
+		}
+		if err := config.DB.Model(&model.Anounce{}).Where("id = ?", req.ID).Updates(updates).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "更新失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "更新成功"})
+		return
+
+	case "delete":
+		config.DB.Delete(&model.Anounce{}, req.ID)
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+}
+
+// AJAX: 操作日志列表
+func (h *AdminHandler) AjaxLogList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	uid := c.DefaultQuery("uid", "")
+	uidInt, _ := strconv.Atoi(uid)
+
+	query := config.DB.Model(&model.Log{})
+	if uidInt > 0 {
+		query = query.Where("uid = ?", uidInt)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var list []model.Log
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&list)
+
+	// 获取商户名称
+	type LogWithUser struct {
+		model.Log
+		UserName string `json:"user_name"`
+	}
+	result := make([]LogWithUser, len(list))
+	for i, l := range list {
+		result[i] = LogWithUser{Log: l}
+		var user model.User
+		if err := config.DB.First(&user, l.UID).Error; err == nil {
+			result[i].UserName = user.Username
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "",
+		"count": total,
+		"data":  result,
+	})
+}
+
+// AJAX: SSO单点登录（管理员登录商户账号）
+func (h *AdminHandler) AjaxSSOLogin(c *gin.Context) {
+	var req struct {
+		UID uint `json:"uid" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	var user model.User
+	if err := config.DB.First(&user, req.UID).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "商户不存在"})
+		return
+	}
+
+	// 生成商户token
+	token := genUserToken(user.UID, user.Key)
+
+	log.Printf("[SSO登录] 管理员登录商户: uid=%d", req.UID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"msg":   "登录成功",
+		"token": token,
+		"uid":   user.UID,
+	})
+}
+
+// 生成商户token
+func genUserToken(uid uint, key string) string {
+	hash := md5.Sum([]byte(fmt.Sprintf("%d_%s_%d", uid, key, time.Now().Unix())))
+	return fmt.Sprintf("%x", hash)
+}
+
+// AJAX: 获取计划任务列表
+func (h *AdminHandler) AjaxCronList(c *gin.Context) {
+	cronSvc := service.GetCronService()
+	tasks := cronSvc.ListTasks()
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "",
+		"data": tasks,
+	})
+}
+
+// AJAX: 计划任务操作
+func (h *AdminHandler) AjaxCronOp(c *gin.Context) {
+	var req struct {
+		Action string `json:"action"` // get, set, run
+		Name   string `json:"name"`
+		Enable *bool  `json:"enable"`
+		Spec   string `json:"spec"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	cronSvc := service.GetCronService()
+
+	switch req.Action {
+	case "get":
+		// 获取任务详情
+		tasks := cronSvc.ListTasks()
+		for _, t := range tasks {
+			if t["name"] == req.Name {
+				c.JSON(http.StatusOK, gin.H{"code": 0, "data": t})
+				return
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "任务不存在"})
+
+	case "set":
+		// 设置任务开关
+		key := fmt.Sprintf("cron_%s", req.Name)
+		if req.Enable != nil {
+			if *req.Enable {
+				config.Set(key, "1")
+				// 重新添加任务
+				spec := config.Get(key + "_spec")
+				if spec != "" {
+					cronSvc.AddTask(req.Name, spec, getCronTask(req.Name))
+				}
+			} else {
+				config.Set(key, "0")
+				cronSvc.RemoveTask(req.Name)
+			}
+		}
+		// 更新执行周期
+		if req.Spec != "" {
+			config.Set(key+"_spec", req.Spec)
+			cronSvc.RemoveTask(req.Name)
+			if config.Get(key) == "1" {
+				cronSvc.AddTask(req.Name, req.Spec, getCronTask(req.Name))
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设置成功"})
+
+	case "run":
+		// 立即执行一次
+		go func() {
+			getCronTask(req.Name)()
+		}()
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "任务已触发"})
+
+	default:
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+	}
+}
+
+// 获取Cron任务函数
+func getCronTask(name string) func() {
+	switch name {
+	case "auto_settle":
+		return func() { service.AutoSettleTask() }
+	case "retry_notify":
+		return func() { service.RetryNotifyTask() }
+	case "risk_check":
+		return func() { service.RiskCheckTask() }
+	case "cleanup":
+		return func() { service.CleanupTask() }
+	default:
+		return func() {}
+	}
+}
+
+// AJAX: 获取支付类型列表
+func (h *AdminHandler) AjaxPayTypeList(c *gin.Context) {
+	var types []model.PayType
+	config.DB.Find(&types)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": types})
+}
+
+// AJAX: 支付类型操作
+func (h *AdminHandler) AjaxPayTypeOp(c *gin.Context) {
+	var req struct {
+		Action    string `json:"action"` // add, edit, delete
+		ID        uint   `json:"id"`
+		Name      string `json:"name"`
+		Device    int    `json:"device"`
+		Showname  string `json:"showname"`
+		Status    int    `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[paytype_op_params_error] err=%s", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "add", "edit":
+		log.Printf("[paytype_op] action=%s, name=%s, showname=%s", req.Action, req.Name, req.Showname)
+		pt := model.PayType{
+			Name:     req.Name,
+			Device:   req.Device,
+			Showname: req.Showname,
+			Status:   req.Status,
+		}
+		var err error
+		if req.Action == "edit" {
+			err = config.DB.Model(&model.PayType{}).Where("id = ?", req.ID).Updates(pt).Error
+		} else {
+			err = config.DB.Create(&pt).Error
+		}
+		if err != nil {
+			log.Printf("[paytype_op_%s_failed] error=%s", req.Action, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功"})
+		return
+
+	case "delete":
+		result := config.DB.Delete(&model.PayType{}, "id = ?", req.ID)
+		if result.Error != nil {
+			log.Printf("[paytype_op_delete_failed] id=%d, error=%s", req.ID, result.Error.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+
+	case "set_status":
+		if err := config.DB.Model(&model.PayType{}).Where("id = ?", req.ID).Update("status", req.Status).Error; err != nil {
+			log.Printf("[paytype_op_set_status_failed] id=%d, status=%d, error=%s", req.ID, req.Status, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "状态更新失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+
+	default:
+		log.Printf("[paytype_op_unknown_action] action=%s", req.Action)
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+	}
+}
+
+// AJAX: 获取轮询配置列表
+func (h *AdminHandler) AjaxRollList(c *gin.Context) {
+	var rolls []model.Roll
+	if err := config.DB.Find(&rolls).Error; err != nil {
+		log.Printf("[获取轮询配置列表失败] error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "获取列表失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": rolls})
+}
+
+// AJAX: 轮询配置操作
+func (h *AdminHandler) AjaxRollOp(c *gin.Context) {
+	var req struct {
+		Action string `json:"action"` // add, edit, delete
+		ID     uint   `json:"id"`
+		Type   int    `json:"type"`
+		Name   string `json:"name"`
+		Kind   int    `json:"kind"`
+		Info   string `json:"info"`
+		Status int    `json:"status"`
+		Index  int    `json:"index"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[roll_op_params_error] err=%s", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "add", "edit":
+		log.Printf("[roll_op] action=%s, name=%s, type=%d", req.Action, req.Name, req.Type)
+		roll := model.Roll{
+			Type:   req.Type,
+			Name:   req.Name,
+			Kind:   req.Kind,
+			Info:   req.Info,
+			Status: req.Status,
+			Index:  req.Index,
+		}
+		var err error
+		if req.Action == "edit" {
+			err = config.DB.Model(&model.Roll{}).Where("id = ?", req.ID).Updates(roll).Error
+		} else {
+			err = config.DB.Create(&roll).Error
+		}
+		if err != nil {
+			log.Printf("[roll_op_%s_failed] error=%s", req.Action, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功"})
+		return
+
+	case "delete":
+		result := config.DB.Delete(&model.Roll{}, "id = ?", req.ID)
+		if result.Error != nil {
+			log.Printf("[roll_op_delete_failed] id=%d, error=%s", req.ID, result.Error.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+
+	case "set_status":
+		if err := config.DB.Model(&model.Roll{}).Where("id = ?", req.ID).Update("status", req.Status).Error; err != nil {
+			log.Printf("[roll_op_set_status_failed] id=%d, status=%d, error=%s", req.ID, req.Status, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "状态更新失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+
+	default:
+		log.Printf("[roll_op_unknown_action] action=%s", req.Action)
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+	}
+}
+
+// AJAX: 获取分账订单列表
+func (h *AdminHandler) AjaxProfitOrderList(c *gin.Context) {
+	var orders []model.PsOrder
+	if err := config.DB.Order("id DESC").Find(&orders).Error; err != nil {
+		log.Printf("[获取分账订单列表失败] error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "获取列表失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": orders})
+}
+
+// AJAX: 获取分账接收方列表
+func (h *AdminHandler) AjaxProfitReceiverList(c *gin.Context) {
+	var receivers []model.PsReceiver
+	if err := config.DB.Order("id DESC").Find(&receivers).Error; err != nil {
+		log.Printf("[获取分账接收方列表失败] error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "获取列表失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": receivers})
+}
+
+// AJAX: 分账接收方操作
+func (h *AdminHandler) AjaxProfitReceiverOp(c *gin.Context) {
+	var req struct {
+		Action  string `json:"action"` // add, edit, delete
+		ID      uint   `json:"id"`
+		UID     uint   `json:"uid"`
+		Name    string `json:"name"`
+		Account string `json:"account"`
+		Rate    string `json:"rate"`
+		Status  int    `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[profit_receiver_op_params_error] err=%s", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "add", "edit":
+		log.Printf("[profit_receiver_op] action=%s, name=%s, account=%s", req.Action, req.Name, req.Account)
+		r := model.PsReceiver{
+			UID:     req.UID,
+			Name:    req.Name,
+			Account: req.Account,
+			Rate:    req.Rate,
+			Status:  req.Status,
+		}
+		var err error
+		if req.Action == "edit" {
+			err = config.DB.Model(&model.PsReceiver{}).Where("id = ?", req.ID).Updates(r).Error
+		} else {
+			err = config.DB.Create(&r).Error
+		}
+		if err != nil {
+			log.Printf("[profit_receiver_op_%s_failed] error=%s", req.Action, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功"})
+		return
+
+	case "delete":
+		result := config.DB.Delete(&model.PsReceiver{}, "id = ?", req.ID)
+		if result.Error != nil {
+			log.Printf("[profit_receiver_op_delete_failed] id=%d, error=%s", req.ID, result.Error.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "删除成功"})
+		return
+
+	case "set_status":
+		if err := config.DB.Model(&model.PsReceiver{}).Where("id = ?", req.ID).Update("status", req.Status).Error; err != nil {
+			log.Printf("[profit_receiver_op_set_status_failed] id=%d, status=%d, error=%s", req.ID, req.Status, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "状态更新失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
+		return
+
+	default:
+		log.Printf("[profit_receiver_op_unknown_action] action=%s", req.Action)
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+	}
+}
+
+// AJAX: 执行分账
+func (h *AdminHandler) AjaxProfitDo(c *gin.Context) {
+	var req struct {
+		PsNo string `json:"ps_no" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[profit_do_params_error] err=%s", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	log.Printf("[profit_do] ps_no=%s", req.PsNo)
+	// TODO: 调用分账服务执行实际分账
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "分账请求已提交"})
+}
+
+// AJAX: 批量转账记录列表
+func (h *AdminHandler) AjaxTransferBatchList(c *gin.Context) {
+	var batches []model.Batch
+	if err := config.DB.Order("id DESC").Find(&batches).Error; err != nil {
+		log.Printf("[获取批量转账记录列表失败] error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "获取列表失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": batches})
+}
+
+// AJAX: 创建批量转账
+func (h *AdminHandler) AjaxTransferBatchCreate(c *gin.Context) {
+	var req struct {
+		Filename string `json:"filename"`
+		Data    string `json:"data"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("[transfer_batch_create_params_error] err=%s", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	log.Printf("[transfer_batch_create] filename=%s, data_len=%d", req.Filename, len(req.Data))
+	// TODO: 解析数据并创建批量转账任务
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "批量转账任务已创建"})
+}
+
+// 上传证书文件
+func (h *AdminHandler) UploadCert(c *gin.Context) {
+	file, err := c.FormFile("cert")
+	if err != nil {
+		log.Printf("[upload_cert_failed] reason=get file failed, error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "请选择要上传的文件"})
+		return
+	}
+
+	// 限制文件大小 5MB
+	if file.Size > 5*1024*1024 {
+		log.Printf("[upload_cert_failed] reason=file too large, size=%d", file.Size)
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "文件大小不能超过5MB"})
+		return
+	}
+
+	// 检查文件类型（只允许 .pem, .cert, .key, .p12, .pfx）
+	ext := strings.ToLower(file.Filename)
+	if !strings.HasSuffix(ext, ".pem") && !strings.HasSuffix(ext, ".cert") &&
+		!strings.HasSuffix(ext, ".key") && !strings.HasSuffix(ext, ".p12") &&
+		!strings.HasSuffix(ext, ".pfx") {
+		log.Printf("[upload_cert_failed] reason=invalid file type, filename=%s", file.Filename)
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "只允许上传 .pem, .cert, .key, .p12, .pfx 格式的证书文件"})
+		return
+	}
+
+	// 生成唯一文件名
+	filename := fmt.Sprintf("cert_%d_%s", time.Now().UnixNano(), file.Filename)
+	uploadPath := fmt.Sprintf("certs/%s", filename)
+
+	// 确保目录存在
+	certDir := "certs"
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		log.Printf("[upload_cert_failed] reason=create dir failed, error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "上传失败"})
+		return
+	}
+
+	if err := c.SaveUploadedFile(file, uploadPath); err != nil {
+		log.Printf("[upload_cert_failed] reason=save file failed, error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存文件失败"})
+		return
+	}
+
+	log.Printf("[upload_cert_success] filename=%s, size=%d", filename, file.Size)
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "上传成功",
+		"data": map[string]string{
+			"path": uploadPath,
+			"name": filename,
+		},
+	})
+}
+
+// 格式化JSON
+func (h *AdminHandler) FormatJson(c *gin.Context) {
+	var req struct {
+		Json string `json:"json"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	var data interface{}
+	if err := json.Unmarshal([]byte(req.Json), &data); err != nil {
+		log.Printf("[format_json_failed] error=%s", err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "JSON格式错误: " + err.Error()})
+		return
+	}
+
+	formatted, _ := json.MarshalIndent(data, "", "  ")
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": string(formatted)})
 }

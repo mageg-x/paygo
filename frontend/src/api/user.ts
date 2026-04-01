@@ -69,3 +69,28 @@ export function updateProfile(data: { username?: string; phone?: string; qq?: st
 export function submitCertificate(data: { certname: string; certno: string; certtype: number }): Promise<ApiResponse> {
   return request.post('/user/certificate', data)
 }
+
+// 找回密码 - 发送验证码
+export function findPwdSendCode(email: string): Promise<ApiResponse> {
+  return request.post('/user/findpwd/send', { email })
+}
+
+// 找回密码 - 重置密码
+export function findPwdReset(data: { email: string; code: string; password: string }): Promise<ApiResponse> {
+  return request.post('/user/findpwd/reset', data)
+}
+
+// 用户组转让记录
+export function getUserGroupTransferList(): Promise<ApiResponse> {
+  return request.get('/user/group/transfer/list')
+}
+
+// 获取用户组列表(商户端)
+export function getUserGroupList(): Promise<ApiResponse> {
+  return request.get('/user/group/list')
+}
+
+// 创建用户组转让
+export function createUserGroupTransfer(data: { target_uid: number; group_id: string; price: number }): Promise<ApiResponse> {
+  return request.post('/user/group/transfer/create', data)
+}

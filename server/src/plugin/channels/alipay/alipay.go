@@ -70,7 +70,17 @@ func (p *AlipayPlugin) GetInfo() plugin.PluginInfo {
 			"6": "APP支付",
 			"7": "JSAPI支付",
 		},
-		Note: "<p>支付宝官方支付接口，支持多种支付方式</p>",
+		Note: `<p>支付宝官方支付接口，支持多种支付方式</p>
+<h4 class="mt-3 font-medium">配置示例：</h4>
+<pre class="bg-gray-50 p-2 rounded text-xs mt-1 overflow-x-auto">
+{
+  "appid": "2021001234567890",
+  "appkey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ...\n-----END PUBLIC KEY-----",
+  "appsecret": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3VS5...\n-----END RSA PRIVATE KEY-----",
+  "appurl": ""
+}
+</pre>
+<p class="text-xs text-gray-500 mt-2">* appkey: 支付宝公钥（RSA2）<br>* appsecret: 应用私钥（RSA2）<br>* appurl: 留空使用默认网关 https://openapi.alipay.com/gateway.do</p>`,
 	}
 }
 

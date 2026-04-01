@@ -68,13 +68,24 @@ func (s *SettleService) ApplySettle(uid uint, account, username string, money fl
 		return nil, errors.New("余额不足")
 	}
 
-	// 计算实际到账金额（扣除手续费）
+	// 计算实际到账金额（扣除手续费）- 优先使用用户组费率
 	rate := 0.0 // 默认0手续费
-	settleRateStr := s.authSvc.GetConfig("settle_rate_" + strconv.Itoa(settleType))
-	if settleRateStr != "" {
-		rate, _ = strconv.ParseFloat(settleRateStr, 10)
+	// 获取用户组的结算费率
+	var group model.Group
+	if err := config.DB.First(&group, user.GID).Error; err == nil {
+		if group.SettleRate != "" {
+			rate, _ = strconv.ParseFloat(group.SettleRate, 10)
+		}
+	}
+	// 如果用户组没有设置费率，使用全局配置
+	if rate == 0 {
+		settleRateStr := s.authSvc.GetConfig("settle_rate_" + strconv.Itoa(settleType))
+		if settleRateStr != "" {
+			rate, _ = strconv.ParseFloat(settleRateStr, 10)
+		}
 	}
 	realMoney := money * (1 - rate/100)
+	log.Printf("[apply_settle] uid=%d, money=%.2f, rate=%.2f%%, real_money=%.2f", uid, money, rate, realMoney)
 
 	tx := config.DB.Begin()
 

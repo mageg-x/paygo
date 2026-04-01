@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 
@@ -168,8 +169,16 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 		payStatus = 2 // 待审核
 	}
 
+	// 获取默认用户组
+	defaultGID := uint(1)
+	if dg := s.GetConfig("default_group"); dg != "" {
+		if parsed, err := strconv.ParseUint(dg, 10, 32); err == nil {
+			defaultGID = uint(parsed)
+		}
+	}
+
 	user := &model.User{
-		GID:      1, // 默认用户组
+		GID:      defaultGID, // 默认用户组
 		Upid:     upid,
 		Key:      key,
 		Pwd:      pwdStr,

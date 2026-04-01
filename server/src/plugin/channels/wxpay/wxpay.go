@@ -75,7 +75,20 @@ func (p *WxpayPlugin) GetInfo() plugin.PluginInfo {
 			"4": "小程序支付",
 			"5": "APP支付",
 		},
-		Note: "<p>微信支付官方接口 V3</p>",
+		Note: `<p>微信支付官方接口 V3版</p>
+<h4 class="mt-3 font-medium">配置示例：</h4>
+<pre class="bg-gray-50 p-2 rounded text-xs mt-1 overflow-x-auto">
+{
+  "appid": "wx1234567890abcdef",
+  "appkey": "your_api_v3_key_here",
+  "appmchid": "1234567890",
+  "appsecret": "",
+  "cert_path": "/path/to/apiclient_cert.pem",
+  "key_path": "/path/to/apiclient_key.pem",
+  "serial_no": "ABCDEF1234567890"
+}
+</pre>
+<p class="text-xs text-gray-500 mt-2">* appkey: APIv3密钥（从微信支付平台获取）<br>* appsecret: 应用密钥（通常留空）<br>* cert_path: API证书路径（退款、转账需要）<br>* serial_no: 证书序列号</p>`,
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"paygo/src/config"
 	"paygo/src/router"
+	"paygo/src/service"
 )
 
 func main() {
@@ -21,6 +22,12 @@ func main() {
 
 	// 初始化数据库
 	config.InitDB()
+
+	// 初始化短信服务
+	service.InitSmsService()
+
+	// 初始化计划任务
+	service.InitSystemCrons()
 
 	// 如果指定了migrate，执行迁移
 	if *migrate {

@@ -65,11 +65,16 @@
         </button>
       </form>
 
-      <div class="mt-6 text-center">
+      <div class="mt-6 text-center space-y-2">
         <router-link to="/user/register"
           class="text-primary-600 hover:text-primary-700 text-sm inline-flex items-center gap-1">
           <UserPlus class="w-4 h-4" />
           还没有账号？立即注册
+        </router-link>
+        <br />
+        <router-link to="/user/findpwd"
+          class="text-gray-500 hover:text-gray-700 text-sm inline-flex items-center gap-1">
+          忘记密码？
         </router-link>
       </div>
     </div>

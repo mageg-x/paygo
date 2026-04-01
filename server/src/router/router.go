@@ -6,6 +6,7 @@ import (
 	"paygo/src/handler/admin"
 	"paygo/src/handler/api"
 	"paygo/src/handler/user"
+	"paygo/src/install"
 	"paygo/src/middleware"
 	"paygo/src/static"
 
@@ -22,6 +23,11 @@ func SetupRouter() *gin.Engine {
 
 	fs := static.GetFileSystem()
 
+	// ========== 安装向导 ==========
+	installHandler := install.NewInstallHandler()
+	r.GET("/install/status", installHandler.CheckInstallStatus)
+	r.POST("/install/do", installHandler.DoInstall)
+
 	// ========== 静态文件 ==========
 	r.GET("/static/*path", func(c *gin.Context) {
 		path := c.Param("path")
@@ -37,6 +43,7 @@ func SetupRouter() *gin.Engine {
 	// ========== JSON API 全部在 /api/* ==========
 	apiHandler := api.NewPayHandler()
 	adminHandler := admin.NewAdminHandler()
+	groupHandler := admin.NewGroupHandler()
 	userHandler := user.NewUserHandler()
 
 	api := r.Group("/api")
@@ -71,6 +78,7 @@ func SetupRouter() *gin.Engine {
 			adminAuth.GET("/settles", adminHandler.AjaxSettleList)
 			adminAuth.POST("/set/save", adminHandler.SaveSettings)
 			adminAuth.GET("/set/config", adminHandler.AjaxGetConfig)
+			adminAuth.GET("/set/get", adminHandler.AjaxGetSettings)
 			adminAuth.GET("/stats", adminHandler.AjaxStats)
 			// 转账管理
 			adminAuth.GET("/transfer", adminHandler.AjaxTransferList)
@@ -85,11 +93,53 @@ func SetupRouter() *gin.Engine {
 			adminAuth.GET("/invitecode", adminHandler.AjaxInviteCodeList)
 			adminAuth.POST("/invitecode/generate", adminHandler.AjaxInviteCodeGenerate)
 			adminAuth.POST("/invitecode/delete", adminHandler.AjaxInviteCodeDelete)
+			// 用户组管理
+			adminAuth.GET("/group", groupHandler.AjaxGroupList)
+			adminAuth.POST("/group/op", groupHandler.AjaxGroupOp)
+			// 风控管理
+			adminAuth.GET("/risk", adminHandler.AjaxRiskList)
+			adminAuth.POST("/risk/op", adminHandler.AjaxRiskOp)
+			// 黑名单管理
+			adminAuth.GET("/blacklist", adminHandler.AjaxBlacklistList)
+			adminAuth.POST("/blacklist/op", adminHandler.AjaxBlacklistOp)
+			// 域名授权管理
+			adminAuth.GET("/domain", adminHandler.AjaxDomainList)
+			adminAuth.POST("/domain/op", adminHandler.AjaxDomainOp)
+			// 公告管理
+			adminAuth.GET("/anounce", adminHandler.AjaxAnounceList)
+			adminAuth.POST("/anounce/op", adminHandler.AjaxAnounceOp)
+			// 操作日志
+			adminAuth.GET("/log", adminHandler.AjaxLogList)
+			// SSO单点登录
+			adminAuth.POST("/sso", adminHandler.AjaxSSOLogin)
+			// 计划任务
+			adminAuth.GET("/cron", adminHandler.AjaxCronList)
+			adminAuth.POST("/cron/op", adminHandler.AjaxCronOp)
+			// 支付类型管理
+			adminAuth.GET("/paytype", adminHandler.AjaxPayTypeList)
+			adminAuth.POST("/paytype/op", adminHandler.AjaxPayTypeOp)
+			// 轮询配置管理
+			adminAuth.GET("/roll", adminHandler.AjaxRollList)
+			adminAuth.POST("/roll/op", adminHandler.AjaxRollOp)
+			// 分账管理
+			adminAuth.GET("/profit/order", adminHandler.AjaxProfitOrderList)
+			adminAuth.GET("/profit/receiver", adminHandler.AjaxProfitReceiverList)
+			adminAuth.POST("/profit/receiver/op", adminHandler.AjaxProfitReceiverOp)
+			adminAuth.POST("/profit/do", adminHandler.AjaxProfitDo)
+			// 批量转账
+			adminAuth.GET("/transfer/batch", adminHandler.AjaxTransferBatchList)
+			adminAuth.POST("/transfer/batch/create", adminHandler.AjaxTransferBatchCreate)
+			// 上传证书
+			adminAuth.POST("/upload/cert", adminHandler.UploadCert)
+			// 格式化JSON
+			adminAuth.POST("/format/json", adminHandler.FormatJson)
 		}
 
 		// 商户后台 API - 公开
 		api.POST("/user/login", userHandler.Login)
 		api.POST("/user/reg", userHandler.Register)
+		api.POST("/user/findpwd/send", userHandler.FindPwdSendCode)
+		api.POST("/user/findpwd/reset", userHandler.FindPwdReset)
 
 		// 商户后台 API - 需要认证
 		userAuth := api.Group("/user")
@@ -103,6 +153,9 @@ func SetupRouter() *gin.Engine {
 			userAuth.POST("/record/list", userHandler.AjaxRecordList)
 			userAuth.POST("/editinfo", userHandler.UpdateProfile)
 			userAuth.POST("/certificate", userHandler.SubmitCertificate)
+			userAuth.GET("/group/list", userHandler.AjaxGroupList)
+			userAuth.GET("/group/transfer/list", userHandler.AjaxGroupTransferList)
+			userAuth.POST("/group/transfer/create", userHandler.AjaxGroupTransferCreate)
 		}
 	}
 

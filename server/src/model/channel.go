@@ -88,21 +88,3 @@ type SubChannel struct {
 func (SubChannel) TableName() string {
 	return "subchannel"
 }
-
-// 微信配置表
-type Weixin struct {
-	ID           uint      `gorm:"primaryKey;column:id" json:"id"`
-	Type         int       `gorm:"column:type" json:"type"`
-	Name         string    `gorm:"column:name" json:"name"`
-	Status       int       `gorm:"column:status" json:"status"`
-	Appid        string    `gorm:"column:appid" json:"appid"`
-	Appsecret    string    `gorm:"column:appsecret" json:"appsecret"`
-	AccessToken  string    `gorm:"column:access_token" json:"access_token"`
-	Addtime      time.Time `gorm:"column:addtime" json:"addtime"`
-	Updatetime   time.Time `gorm:"column:updatetime" json:"updatetime"`
-	Expiretime   time.Time `gorm:"column:expiretime" json:"expiretime"`
-}
-
-func (Weixin) TableName() string {
-	return "weixin"
-}
