@@ -54,10 +54,10 @@ type PluginInfo struct {
 
 // 输入配置
 type InputConfig struct {
-	Name    string            // 配置名称
-	Type    string            // input, textarea, select
-	Options map[string]string // select选项
-	Note    string            // 说明
+	Name    string            `json:"name"`    // 配置名称
+	Type    string            `json:"type"`    // input, textarea, select
+	Options map[string]string `json:"options"` // select选项
+	Note    string            `json:"note"`    // 说明
 }
 
 // 提交结果

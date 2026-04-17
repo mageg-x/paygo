@@ -754,17 +754,18 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 
 	// 3. 合并数据
 	type PluginResponse struct {
-		Name       string            `json:"name"`
-		Showname   string            `json:"showname"`
-		Author     string            `json:"author"`
-		Link       string            `json:"link"`
-		Types      string            `json:"types"`
-		Transtypes string            `json:"transtypes"`
-		Status     int               `json:"status"`
-		Config     string            `json:"config"`
-		Note       string            `json:"note"` // 内置插件有说明
-		IsBuiltIn  bool              `json:"is_builtin"`
-		Select     map[string]string `json:"select"` // 支付方式选择
+		Name       string                        `json:"name"`
+		Showname   string                        `json:"showname"`
+		Author     string                        `json:"author"`
+		Link       string                        `json:"link"`
+		Types      string                        `json:"types"`
+		Transtypes string                        `json:"transtypes"`
+		Status     int                           `json:"status"`
+		Config     string                        `json:"config"`
+		Note       string                        `json:"note"` // 内置插件有说明
+		IsBuiltIn  bool                          `json:"is_builtin"`
+		Select     map[string]string             `json:"select"` // 支付方式选择
+		Inputs     map[string]plugin.InputConfig `json:"inputs"` // 配置字段定义
 	}
 
 	result := make([]PluginResponse, 0, len(builtInPlugins))
@@ -790,6 +791,7 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 			Note:       p.Note,
 			IsBuiltIn:  true,
 			Select:     p.Select,
+			Inputs:     p.Inputs,
 		})
 	}
 

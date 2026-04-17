@@ -1,127 +1,66 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600">
-    <div class="container mx-auto px-4 py-16">
-      <div class="text-center mb-12">
-        <img src="@/assets/paygo.png" alt="Logo" class="w-20 h-20 mx-auto mb-4" />
-        <h1 class="text-4xl font-bold text-white mb-4">彩虹易支付</h1>
-        <p class="text-blue-100">安全、快捷、稳定的聚合支付平台</p>
+  <div class="min-h-screen bg-gradient-to-br from-blue-600 via-sky-500 to-indigo-600 text-white">
+    <div class="mx-auto max-w-6xl px-6 py-14 md:py-20">
+      <div class="text-center">
+        <img :src="logo" alt="彩虹易支付" class="mx-auto h-20 w-20 drop-shadow-lg" />
+        <h1 class="mt-5 text-4xl md:text-5xl font-black tracking-wide">彩虹易支付</h1>
+        <p class="mt-3 text-blue-50 text-base md:text-lg">安全、快捷、稳定的聚合支付平台</p>
       </div>
 
-      <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-xl p-8">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6">发起支付</h2>
+      <div class="mt-10 grid gap-4 md:grid-cols-3">
+        <div class="rounded-2xl bg-white/15 backdrop-blur p-5 border border-white/30 shadow-lg">
+          <div class="text-sm text-blue-100">核心能力</div>
+          <div class="mt-1 text-xl font-bold">统一收银</div>
+          <p class="mt-2 text-sm text-blue-50/90">支付宝、微信等通道统一接入，快速完成支付闭环。</p>
+        </div>
+        <div class="rounded-2xl bg-white/15 backdrop-blur p-5 border border-white/30 shadow-lg">
+          <div class="text-sm text-blue-100">核心能力</div>
+          <div class="mt-1 text-xl font-bold">稳定可靠</div>
+          <p class="mt-2 text-sm text-blue-50/90">支持状态轮询、回调重试与风控校验，保障订单可追踪。</p>
+        </div>
+        <div class="rounded-2xl bg-white/15 backdrop-blur p-5 border border-white/30 shadow-lg">
+          <div class="text-sm text-blue-100">核心能力</div>
+          <div class="mt-1 text-xl font-bold">开放接口</div>
+          <p class="mt-2 text-sm text-blue-50/90">提供 OpenAPI 对接能力，兼容商户自有业务系统。</p>
+        </div>
+      </div>
 
-        <form @submit.prevent="handleSubmit" class="space-y-4">
-          <div>
-            <label class="form-label">商户ID</label>
-            <input v-model="form.pid" type="text" class="form-input px-3" placeholder="请输入商户ID" required />
-          </div>
+      <div class="mt-10 mx-auto max-w-2xl rounded-2xl bg-white/95 text-gray-800 p-6 md:p-8 shadow-2xl">
+        <h2 class="text-2xl font-bold">开始使用</h2>
+        <p class="mt-2 text-sm text-gray-500">请选择入口进入系统控制台或收银体验页。</p>
 
-          <div>
-            <label class="form-label">支付方式</label>
-            <div class="grid grid-cols-2 gap-3">
-              <button v-for="pt in payTypes" :key="pt.id" type="button" :class="[
-                'p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center gap-2',
-                form.type === String(pt.id)
-                  ? 'border-primary-500 bg-primary-50 shadow-md'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              ]" @click="form.type = String(pt.id)">
-                <SvgIcon :name="pt.icon" :size="32" />
-                <div class="font-medium" :class="form.type === String(pt.id) ? 'text-primary-700' : 'text-gray-600'">{{
-                  pt.name }}</div>
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label class="form-label">商户订单号</label>
-            <input v-model="form.out_trade_no" type="text" class="form-input px-3" placeholder="唯一订单号" required />
-          </div>
-
-          <div>
-            <label class="form-label">商品名称</label>
-            <input v-model="form.name" type="text" class="form-input px-3" placeholder="商品名称" required />
-          </div>
-
-          <div>
-            <label class="form-label">金额（元）</label>
-            <input v-model="form.money" type="number" step="0.01" class="form-input px-3" placeholder="0.00" required />
-          </div>
-
-          <div>
-            <label class="form-label">回调地址</label>
-            <input v-model="form.notify_url" type="url" class="form-input px-3" placeholder="http://" />
-          </div>
-
-          <div>
-            <label class="form-label">返回地址</label>
-            <input v-model="form.return_url" type="url" class="form-input px-3" placeholder="http://" />
-          </div>
-
-          <button type="submit" :disabled="loading"
-            class="w-full py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50">
-            {{ loading ? '处理中...' : '提交支付' }}
+        <div class="mt-6 grid gap-3 md:grid-cols-3">
+          <button
+            class="rounded-xl bg-blue-600 text-white px-4 py-3 font-semibold hover:bg-blue-700 transition-colors"
+            @click="go('/user/login')"
+          >
+            商户后台
           </button>
-        </form>
-      </div>
-
-      <div class="text-center mt-8 text-blue-100">
-        <p>API文档 | 商户后台 | 联系我们</p>
+          <button
+            class="rounded-xl bg-slate-800 text-white px-4 py-3 font-semibold hover:bg-slate-900 transition-colors"
+            @click="go('/admin/login')"
+          >
+            管理后台
+          </button>
+          <button
+            class="rounded-xl border border-gray-200 px-4 py-3 font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            @click="go('/cashier/user/1')"
+          >
+            收银体验
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import SvgIcon from '@/components/svgicon.vue'
-import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import logo from '@/assets/paygo.png'
 
-const loading = ref(false)
-const form = ref({
-  pid: '',
-  type: '1',
-  out_trade_no: '',
-  name: '',
-  money: '',
-  notify_url: '',
-  return_url: ''
-})
+const router = useRouter()
 
-const payTypes = [
-  { id: 1, name: '支付宝', icon: 'alipay' },
-  { id: 2, name: '微信支付', icon: 'wechatpay' },
-]
-
-async function handleSubmit() {
-  if (!form.value.pid || !form.value.out_trade_no || !form.value.money) {
-    ElMessage.warning('请填写必填项')
-    return
-  }
-
-  loading.value = true
-
-  try {
-    const res = await fetch('/api/pay/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        ...form.value,
-        money: form.value.money
-      })
-    })
-    const data = await res.json()
-
-    if (data.code === 0) {
-      if (data.result.type === 'jump' && data.result.url) {
-        window.location.href = data.result.url
-      }
-    } else {
-      ElMessage.error(data.msg || '支付提交失败')
-    }
-  } catch (error) {
-    ElMessage.error('请求失败')
-  } finally {
-    loading.value = false
-  }
+function go(path: string) {
+  router.push(path)
 }
 </script>

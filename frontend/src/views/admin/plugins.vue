@@ -132,34 +132,55 @@
             </div>
 
             <!-- 配置输入 -->
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">插件配置 (JSON)</label>
-              <JsonEditor v-model="pluginConfig" placeholder='{"appid": "xxx", "appkey": "xxx"}' />
-            </div>
+            <div class="space-y-3">
+              <label class="block text-sm font-medium text-gray-700">插件配置</label>
+              <template v-if="currentPluginInputs.length > 0">
+                <div
+                  v-for="field in currentPluginInputs"
+                  :key="field.key"
+                  class="space-y-1"
+                >
+                  <label class="block text-sm text-gray-700">
+                    {{ field.input?.name || field.key }}
+                    <span class="text-xs text-gray-400 font-mono ml-1">({{ field.key }})</span>
+                  </label>
 
-            <!-- 证书上传（仅微信支付需要） -->
-            <div v-if="currentPlugin?.name === 'wxpay'" class="bg-amber-50 rounded-lg p-4">
-              <div class="flex items-center justify-between mb-3">
-                <div>
-                  <div class="font-medium text-amber-800">微信支付证书</div>
-                  <div class="text-xs text-amber-600 mt-1">微信退款、转账等功能需要上传证书</div>
+                  <select
+                    v-if="field.input?.type === 'select'"
+                    v-model="pluginForm[field.key]"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  >
+                    <option value="">请选择</option>
+                    <option
+                      v-for="(label, val) in field.input.options || {}"
+                      :key="val"
+                      :value="val"
+                    >
+                      {{ label }}
+                    </option>
+                  </select>
+
+                  <textarea
+                    v-else-if="field.input?.type === 'textarea'"
+                    v-model="pluginForm[field.key]"
+                    rows="6"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+
+                  <input
+                    v-else
+                    v-model="pluginForm[field.key]"
+                    type="text"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+
+                  <div v-if="field.input?.note" class="text-xs text-gray-500">
+                    {{ field.input.note }}
+                  </div>
                 </div>
-              </div>
-              <div class="flex items-center gap-3">
-                <input type="file" ref="certInput" accept=".pem,.cert,.key,.p12,.pfx" @change="handleCertSelect"
-                  class="hidden" />
-                <button @click="$refs.certInput.click()"
-                  class="px-4 py-2 text-sm bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors">
-                  选择证书文件
-                </button>
-                <span class="text-sm text-amber-700">{{ certFileName || '未选择文件' }}</span>
-              </div>
-              <div v-if="certFileName" class="mt-3 p-2 bg-white rounded border border-amber-200">
-                <div class="text-xs text-gray-500">证书路径（自动填入配置）:</div>
-                <div class="font-mono text-sm text-gray-700 mt-1">{{ certPath }}</div>
-              </div>
-              <div v-if="uploading" class="mt-3 text-sm text-amber-600">
-                上传中...
+              </template>
+              <div v-else class="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                当前插件未声明可视化配置字段
               </div>
             </div>
 
@@ -201,23 +222,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import request from '@/api/request'
+import { computed, ref, onMounted, watch } from 'vue'
 import { getPluginList, pluginOp } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
-import JsonEditor from '@/components/json-editor.vue'
 import { Beaker } from 'lucide-vue-next'
 
 const plugins = ref<any[]>([])
 const showConfigModal = ref(false)
 const currentPlugin = ref<any>(null)
-const pluginConfig = ref('')
-const certInput = ref<HTMLInputElement | null>(null)
-const certFileName = ref('')
-const certPath = ref('')
-const uploading = ref(false)
+const pluginForm = ref<Record<string, string>>({})
+const extraConfig = ref<Record<string, any>>({})
 const TestIcon = Beaker
+
+const currentPluginInputs = computed(() => {
+  const inputs = currentPlugin.value?.inputs || {}
+  return Object.keys(inputs).map((key) => ({ key, input: inputs[key] }))
+})
 
 function getPluginBgClass(types: string) {
   if (types?.includes('支付宝')) return 'bg-blue-50'
@@ -262,19 +283,158 @@ async function toggleStatus(p: any) {
 
 function showConfig(p: any) {
   currentPlugin.value = p
-  pluginConfig.value = p.config || '{}'
-  certFileName.value = ''
-  certPath.value = ''
+  const parsed = parseConfigJSON(p.config)
+  const inputs = p?.inputs || {}
+  const form: Record<string, string> = {}
+  for (const key of Object.keys(inputs)) {
+    const val = parsed[key]
+    form[key] = val === undefined || val === null ? '' : String(val)
+  }
+  pluginForm.value = form
+
+  const extras: Record<string, any> = {}
+  for (const [k, v] of Object.entries(parsed)) {
+    if (!inputs[k]) {
+      extras[k] = v
+    }
+  }
+  extraConfig.value = extras
   showConfigModal.value = true
+}
+
+function parseConfigJSON(raw: string): Record<string, any> {
+  const text = (raw || '').trim()
+  if (!text) return {}
+  try {
+    const data = JSON.parse(text)
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      return data
+    }
+    return {}
+  } catch {
+    return {}
+  }
+}
+
+function buildPluginConfigString(): string {
+  const nextConfig: Record<string, any> = { ...extraConfig.value }
+  for (const [k, v] of Object.entries(pluginForm.value)) {
+    if (v === undefined || v === null) continue
+    const text = String(v)
+    if (text.trim() === '') continue
+    nextConfig[k] = text
+  }
+  return JSON.stringify(nextConfig)
+}
+
+function decodePemToDer(pem: string): Uint8Array | null {
+  let text = String(pem || '').trim()
+  if (!text) return null
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    text = text.slice(1, -1)
+  }
+  text = text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').trim()
+
+  const match = text.match(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/)
+  const base64Body = (match ? match[1] : text).replace(/[^A-Za-z0-9+/=]/g, '')
+  if (!base64Body) return null
+
+  try {
+    const binary = atob(base64Body)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes
+  } catch {
+    return null
+  }
+}
+
+function readAsn1Length(bytes: Uint8Array, offset: number): { length: number; next: number } | null {
+  if (offset >= bytes.length) return null
+  const first = bytes[offset]
+  if ((first & 0x80) === 0) {
+    return { length: first, next: offset + 1 }
+  }
+  const n = first & 0x7f
+  if (n <= 0 || n > 4 || offset+1+n > bytes.length) return null
+  let len = 0
+  for (let i = 0; i < n; i++) {
+    len = (len << 8) | bytes[offset + 1 + i]
+  }
+  return { length: len, next: offset + 1 + n }
+}
+
+function readAsn1Tlv(bytes: Uint8Array, offset: number): { tag: number; valueStart: number; valueEnd: number; next: number } | null {
+  if (offset + 2 > bytes.length) return null
+  const tag = bytes[offset]
+  const lenInfo = readAsn1Length(bytes, offset + 1)
+  if (!lenInfo) return null
+  const valueStart = lenInfo.next
+  const valueEnd = valueStart + lenInfo.length
+  if (valueEnd > bytes.length) return null
+  return { tag, valueStart, valueEnd, next: valueEnd }
+}
+
+function bytesToHexUpper(bytes: Uint8Array): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i].toString(16).padStart(2, '0')
+  }
+  return out.toUpperCase()
+}
+
+function extractSerialFromMerchantCert(pem: string): string | null {
+  const der = decodePemToDer(pem)
+  if (!der) return null
+
+  // Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue }
+  const certSeq = readAsn1Tlv(der, 0)
+  if (!certSeq || certSeq.tag !== 0x30) return null
+
+  // tbsCertificate ::= SEQUENCE { [0] version OPTIONAL, serialNumber INTEGER, ... }
+  const tbs = readAsn1Tlv(der, certSeq.valueStart)
+  if (!tbs || tbs.tag !== 0x30) return null
+
+  let cursor = tbs.valueStart
+  const first = readAsn1Tlv(der, cursor)
+  if (!first) return null
+
+  // 可选 version [0] EXPLICIT
+  if (first.tag === 0xa0) {
+    cursor = first.next
+  }
+
+  const serialTlv = readAsn1Tlv(der, cursor)
+  if (!serialTlv || serialTlv.tag !== 0x02) return null
+
+  let serialBytes = der.slice(serialTlv.valueStart, serialTlv.valueEnd)
+  // ASN.1 INTEGER 可能有符号扩展前导 00
+  while (serialBytes.length > 1 && serialBytes[0] === 0x00) {
+    serialBytes = serialBytes.slice(1)
+  }
+  return bytesToHexUpper(serialBytes)
+}
+
+function getCertInputText(): string {
+  const merchantCert = String(pluginForm.value.merchant_cert || '').trim()
+  if (merchantCert) return merchantCert
+  const platformCert = String(pluginForm.value.platform_cert || '').trim()
+  if (platformCert) return platformCert
+  const certPath = String(pluginForm.value.cert_path || '').trim()
+  if (certPath.includes('BEGIN CERTIFICATE')) return certPath
+  return ''
 }
 
 async function testPluginConfig() {
   if (!currentPlugin.value) return
   try {
+    const config = buildPluginConfigString()
     const res = await pluginOp({
       action: 'test_config',
       name: currentPlugin.value.name,
-      config: pluginConfig.value
+      config
     })
     if (res.code === 0) {
       ElMessage.success(res.msg || '测试成功')
@@ -291,16 +451,11 @@ async function testPluginConfig() {
 async function savePluginConfig() {
   if (!currentPlugin.value) return
   try {
-    try {
-      JSON.parse(pluginConfig.value)
-    } catch {
-      ElMessage.warning('JSON 格式不正确')
-      return
-    }
+    const config = buildPluginConfigString()
     const res = await pluginOp({
       action: 'save_config',
       name: currentPlugin.value.name,
-      config: pluginConfig.value
+      config
     })
     ElMessage.success(res.msg || '保存成功')
     showConfigModal.value = false
@@ -310,51 +465,24 @@ async function savePluginConfig() {
   }
 }
 
-async function handleCertSelect(e: Event) {
-  const target = e.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-
-  certFileName.value = file.name
-  uploading.value = true
-
-  const formData = new FormData()
-  formData.append('cert', file)
-
-  try {
-    const res = await request.post('/admin/upload/cert', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    if (res.code === 0) {
-      certPath.value = res.data.path
-      ElMessage.success('证书上传成功')
-
-      // 自动填入配置
-      try {
-        const config = JSON.parse(pluginConfig.value || '{}')
-        if (file.name.endsWith('.p12') || file.name.endsWith('.pfx')) {
-          config.cert_path = res.data.path
-        } else if (file.name.endsWith('.pem') || file.name.endsWith('.cert')) {
-          config.cert_path = res.data.path
-        } else if (file.name.endsWith('.key')) {
-          config.key_path = res.data.path
-        }
-        pluginConfig.value = JSON.stringify(config, null, 2)
-      } catch {
-        pluginConfig.value = JSON.stringify({ cert_path: res.data.path }, null, 2)
-      }
-    } else {
-      ElMessage.error(res.msg || '上传失败')
-    }
-  } catch (error) {
-    console.error('证书上传失败:', error)
-    ElMessage.error('证书上传失败')
-  } finally {
-    uploading.value = false
-  }
-}
-
 onMounted(() => {
   fetchPlugins()
 })
+
+watch(
+  () => [currentPlugin.value?.name, pluginForm.value.merchant_cert, pluginForm.value.platform_cert, pluginForm.value.cert_path],
+  ([pluginName]) => {
+    if (pluginName !== 'wxpay') return
+    const certText = getCertInputText()
+    const serial = extractSerialFromMerchantCert(certText)
+    if (serial) {
+      pluginForm.value.serial_no = serial
+      return
+    }
+    if (!certText) {
+      pluginForm.value.serial_no = ''
+    }
+  }
+  , { immediate: true }
+)
 </script>

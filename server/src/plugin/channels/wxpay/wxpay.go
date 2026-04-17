@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -37,13 +38,20 @@ type WxpayPlugin struct {
 
 // 配置结构
 type WxpayConfig struct {
-	AppID     string `json:"appid"`
-	AppKey    string `json:"appkey"`   // APIv3密钥(平台证书密钥)
-	MchID     string `json:"appmchid"` // 商户号
-	AppSecret string `json:"appsecret"`
-	CertPath  string `json:"cert_path"`
-	KeyPath   string `json:"key_path"`
-	SerialNo  string `json:"serial_no"` // 证书序列号
+	AppID        string `json:"appid"`
+	AppKey       string `json:"appkey"`        // APIv3密钥
+	MchID        string `json:"appmchid"`      // 商户号
+	SerialNo     string `json:"serial_no"`     // 商户证书序列号（可留空自动解析）
+	PrivateKey   string `json:"private_key"`   // 商户私钥内容PEM
+	MerchantCert string `json:"merchant_cert"` // 商户证书内容PEM（用于自动解析序列号）
+	// 兼容旧字段（仅兼容读取）
+	AppSecret        string `json:"appsecret"`
+	CertPath         string `json:"cert_path"`
+	KeyPath          string `json:"key_path"`
+	PrivateKeyPath   string `json:"private_key_path"`
+	MerchantCertPath string `json:"merchant_cert_path"`
+	PlatformCert     string `json:"platform_cert"`
+	PlatformCertPath string `json:"platform_cert_path"`
 }
 
 func mergeConfigJSON(baseRaw, overrideRaw string) (map[string]interface{}, error) {
@@ -101,9 +109,12 @@ func (p *WxpayPlugin) GetInfo() plugin.PluginInfo {
 		Types:      []string{"wxpay"},
 		Transtypes: []string{"wxpay", "bank"},
 		Inputs: map[string]plugin.InputConfig{
-			"appid":    {Name: "应用ID(AppID)", Type: "input"},
-			"appkey":   {Name: "APIv3密钥", Type: "input"},
-			"appmchid": {Name: "商户号", Type: "input"},
+			"appid":         {Name: "应用ID(AppID)", Type: "input"},
+			"appmchid":      {Name: "商户号(MCHID)", Type: "input"},
+			"appkey":        {Name: "APIv3密钥", Type: "input"},
+			"private_key":   {Name: "商户私钥内容(PEM)", Type: "textarea", Note: "必填，直接粘贴"},
+			"merchant_cert": {Name: "商户证书内容(PEM)", Type: "textarea", Note: "建议填写，可自动解析 serial_no"},
+			"serial_no":     {Name: "商户证书序列号", Type: "input", Note: "可选；不填将从 merchant_cert 自动计算"},
 		},
 		Select: map[string]string{
 			"1": "扫码支付",
@@ -114,18 +125,17 @@ func (p *WxpayPlugin) GetInfo() plugin.PluginInfo {
 		},
 		Note: `<p>微信支付官方接口 V3版</p>
 <h4 class="mt-3 font-medium">配置示例：</h4>
-<pre class="bg-gray-50 p-2 rounded text-xs mt-1 overflow-x-auto">
-{
-  "appid": "wx1234567890abcdef",
-  "appkey": "your_api_v3_key_here",
-  "appmchid": "1234567890",
-  "appsecret": "",
-  "cert_path": "/path/to/apiclient_cert.pem",
-  "key_path": "/path/to/apiclient_key.pem",
-  "serial_no": "ABCDEF1234567890"
-}
+	<pre class="bg-gray-50 p-2 rounded text-xs mt-1 overflow-x-auto">
+	{
+	  "appid": "wx1234567890abcdef",
+	  "appmchid": "1234567890",
+	  "appkey": "your_api_v3_key_here",
+	  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+	  "merchant_cert": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+	  "serial_no": ""
+	}
 </pre>
-<p class="text-xs text-gray-500 mt-2">* appkey: APIv3密钥（从微信支付平台获取）<br>* appsecret: 应用密钥（通常留空）<br>* cert_path: API证书路径（退款、转账需要）<br>* serial_no: 证书序列号</p>`,
+<p class="text-xs text-gray-500 mt-2">* serial_no 支持自动解析（优先从 merchant_cert）<br>* 旧版 cert_path/key_path 仍兼容读取，但不再推荐</p>`,
 	}
 }
 
@@ -175,8 +185,8 @@ func (p *WxpayPlugin) getClient(channel model.Channel) (*core.Client, error) {
 		return nil, err
 	}
 
-	// 加载私钥
-	privateKey, err := p.loadPrivateKey(cfg.KeyPath)
+	// 加载私钥（优先读取内容字段，兼容历史路径字段）
+	privateKey, err := p.resolvePrivateKey(cfg)
 	if err != nil {
 		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=load private key failed, error=%s", channel.ID, err.Error())
 		return nil, fmt.Errorf("加载私钥失败: %v", err)
@@ -188,18 +198,22 @@ func (p *WxpayPlugin) getClient(channel model.Channel) (*core.Client, error) {
 		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=invalid private key format")
 		return nil, fmt.Errorf("私钥格式错误")
 	}
-	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	rsaKey, err := parseRSAPrivateKey(block.Bytes)
 	if err != nil {
 		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=parse private key failed, error=%s", channel.ID, err.Error())
 		return nil, fmt.Errorf("解析私钥失败: %v", err)
 	}
 
+	serialNo, err := p.resolveMerchantSerialNo(cfg)
+	if err != nil {
+		log.Printf("[wxpay_get_client_failed] channel_id=%d, reason=resolve serial no failed, error=%s", channel.ID, err.Error())
+		return nil, fmt.Errorf("缺少商户证书序列号(serial_no)，请填写或提供merchant_cert自动解析")
+	}
+
 	// 创建客户端，不验签（验签在回调时单独处理）
 	opts := []core.ClientOption{
 		option.WithoutValidator(),
-	}
-	if cfg.SerialNo != "" && rsaKey != nil {
-		opts = append(opts, option.WithMerchantCredential(cfg.MchID, cfg.SerialNo, rsaKey))
+		option.WithMerchantCredential(cfg.MchID, serialNo, rsaKey),
 	}
 
 	client, err := core.NewClient(context.Background(), opts...)
@@ -212,13 +226,78 @@ func (p *WxpayPlugin) getClient(channel model.Channel) (*core.Client, error) {
 	return client, nil
 }
 
-// 加载私钥
-func (p *WxpayPlugin) loadPrivateKey(keyPath string) (string, error) {
-	data, err := os.ReadFile(keyPath)
+func (p *WxpayPlugin) resolvePrivateKey(cfg *WxpayConfig) (string, error) {
+	candidates := []string{
+		strings.TrimSpace(cfg.PrivateKey),
+		strings.TrimSpace(cfg.AppSecret), // 兼容旧字段
+		strings.TrimSpace(cfg.KeyPath),   // 兼容旧字段
+		strings.TrimSpace(cfg.PrivateKeyPath),
+	}
+	for _, v := range candidates {
+		if v == "" {
+			continue
+		}
+		// 兼容历史路径：如果不是PEM内容，按路径读取
+		if strings.Contains(v, "BEGIN") {
+			return v, nil
+		}
+		b, err := os.ReadFile(v)
+		if err == nil {
+			return string(b), nil
+		}
+	}
+	return "", fmt.Errorf("未配置商户私钥(private_key)")
+}
+
+func (p *WxpayPlugin) resolveMerchantCert(cfg *WxpayConfig) (string, error) {
+	candidates := []string{
+		strings.TrimSpace(cfg.MerchantCert),
+		strings.TrimSpace(cfg.CertPath), // 兼容旧字段
+		strings.TrimSpace(cfg.MerchantCertPath),
+	}
+	for _, v := range candidates {
+		if v == "" {
+			continue
+		}
+		if strings.Contains(v, "BEGIN CERTIFICATE") {
+			return v, nil
+		}
+		b, err := os.ReadFile(v)
+		if err == nil {
+			return string(b), nil
+		}
+	}
+	return "", fmt.Errorf("未配置商户证书(merchant_cert)")
+}
+
+func normalizeSerialNo(s string) string {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	s = strings.TrimPrefix(s, "SERIAL=")
+	s = strings.ReplaceAll(s, ":", "")
+	return s
+}
+
+func (p *WxpayPlugin) resolveMerchantSerialNo(cfg *WxpayConfig) (string, error) {
+	if serial := normalizeSerialNo(cfg.SerialNo); serial != "" {
+		return serial, nil
+	}
+	certPEM, err := p.resolveMerchantCert(cfg)
 	if err != nil {
 		return "", err
 	}
-	return string(data), nil
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return "", fmt.Errorf("merchant_cert格式错误")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+	if cert.SerialNumber == nil || len(cert.SerialNumber.Bytes()) == 0 {
+		return "", fmt.Errorf("证书序列号为空")
+	}
+	serial := strings.ToUpper(hex.EncodeToString(cert.SerialNumber.Bytes()))
+	return serial, nil
 }
 
 // 提交支付
@@ -812,9 +891,9 @@ func (p *WxpayPlugin) sign(message, privateKey string) (string, error) {
 		return "", fmt.Errorf("failed to decode private key")
 	}
 
-	privateKeyParsed, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	privateKeyParsed, err := parseRSAPrivateKey(block.Bytes)
 	if err != nil {
-		log.Printf("[wxpay_sign_failed] reason=parse pkcs1 failed, error=%s", err.Error())
+		log.Printf("[wxpay_sign_failed] reason=parse private key failed, error=%s", err.Error())
 		return "", err
 	}
 
@@ -828,6 +907,21 @@ func (p *WxpayPlugin) sign(message, privateKey string) (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(signature), nil
+}
+
+func parseRSAPrivateKey(keyBytes []byte) (*rsa.PrivateKey, error) {
+	if key, err := x509.ParsePKCS1PrivateKey(keyBytes); err == nil {
+		return key, nil
+	}
+	pkcs8Key, err := x509.ParsePKCS8PrivateKey(keyBytes)
+	if err != nil {
+		return nil, err
+	}
+	rsaKey, ok := pkcs8Key.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("private key is not RSA")
+	}
+	return rsaKey, nil
 }
 
 // 生成随机字符串
@@ -865,15 +959,26 @@ func (p *WxpayPlugin) TestConfig(config string) (bool, string) {
 		return false, "缺少API密钥"
 	}
 
+	privateKey, err := p.resolvePrivateKey(&cfg)
+	if err != nil {
+		log.Printf("[wxpay_test_config_failed] reason=missing private key, error=%s", err.Error())
+		return false, "缺少商户私钥(private_key)"
+	}
+	serialNo, err := p.resolveMerchantSerialNo(&cfg)
+	if err != nil {
+		log.Printf("[wxpay_test_config_failed] reason=resolve serial_no failed, error=%s", err.Error())
+		return false, "缺少商户证书序列号(serial_no)，请填写或提供merchant_cert自动解析"
+	}
+
 	// 测试签名
 	testMessage := fmt.Sprintf("%s|%s|%s", cfg.AppID, cfg.MchID, p.generateNonceStr(32))
 
-	sign, err := p.sign(testMessage, cfg.AppKey)
+	sign, err := p.sign(testMessage, privateKey)
 	if err != nil {
 		log.Printf("[wxpay_test_config_failed] appid=%s, reason=sign failed, error=%s", cfg.AppID, err.Error())
 		return false, "签名失败: " + err.Error()
 	}
 
 	log.Printf("[wxpay_test_config_success] appid=%s", cfg.AppID)
-	return true, "配置正确，签名测试成功: " + sign[:20] + "..."
+	return true, "配置正确，序列号=" + serialNo + "，签名测试成功: " + sign[:20] + "..."
 }
