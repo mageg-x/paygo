@@ -11,8 +11,20 @@ export function paySubmit(data: {
   notify_url: string
   return_url?: string
   param?: string
+  method?: string
+  device?: string
 }) {
-  return request.post('/pay/submit', data)
+  const form = new URLSearchParams()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      form.append(key, String(value))
+    }
+  })
+  return request.post('/pay/submit', form, {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  })
 }
 
 // JSON API创建订单

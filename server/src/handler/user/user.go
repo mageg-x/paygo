@@ -92,6 +92,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 		Phone      string `json:"phone"`
 		Password   string `json:"password"`
 		InviteCode string `json:"invite_code"`
+		Code       string `json:"code"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -101,12 +102,40 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	ip := middleware.GetRealIP(c)
 
-	// 验证码验证（TODO: 实际实现）
-	// code := c.PostForm("code")
-	// if !h.authSvc.VerifyCode("reg", email, code) {
-	//     c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "验证码错误"})
-	//     return
-	// }
+	// 注册验证码验证（按配置要求）
+	verifyType := h.authSvc.GetConfig("user_verification") // 0=无, 1=邮箱, 2=手机
+	switch verifyType {
+	case "1":
+		if req.Email == "" {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "请填写邮箱"})
+			return
+		}
+		if req.Code == "" || !h.authSvc.VerifyCode("reg", req.Email, req.Code) {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "验证码错误或已过期"})
+			return
+		}
+	case "2":
+		if req.Phone == "" {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "请填写手机号"})
+			return
+		}
+		if req.Code == "" || !h.authSvc.VerifyCode("reg", req.Phone, req.Code) {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "验证码错误或已过期"})
+			return
+		}
+	default:
+		// 配置未强制验证时，若传了验证码则做校验
+		if req.Code != "" {
+			target := req.Email
+			if target == "" {
+				target = req.Phone
+			}
+			if target != "" && !h.authSvc.VerifyCode("reg", target, req.Code) {
+				c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "验证码错误或已过期"})
+				return
+			}
+		}
+	}
 
 	user, err := h.authSvc.UserRegister(req.Email, req.Phone, req.Password, req.InviteCode, ip)
 	if err != nil {
@@ -121,6 +150,53 @@ func (h *UserHandler) Register(c *gin.Context) {
 		"msg":  "注册成功",
 		"uid":  user.UID,
 	})
+}
+
+// 注册 - 发送验证码
+func (h *UserHandler) RegSendCode(c *gin.Context) {
+	var req struct {
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	verifyType := h.authSvc.GetConfig("user_verification") // 0=无, 1=邮箱, 2=手机
+	target := ""
+
+	switch verifyType {
+	case "1":
+		target = strings.TrimSpace(req.Email)
+		if target == "" {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "请输入邮箱"})
+			return
+		}
+	case "2":
+		target = strings.TrimSpace(req.Phone)
+		if target == "" {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "请输入手机号"})
+			return
+		}
+	default:
+		if req.Email != "" {
+			target = strings.TrimSpace(req.Email)
+		} else {
+			target = strings.TrimSpace(req.Phone)
+		}
+		if target == "" {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "请填写邮箱或手机号"})
+			return
+		}
+	}
+
+	if _, err := h.authSvc.GenCode("reg", target); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "验证码已发送"})
 }
 
 // 登出
@@ -530,15 +606,11 @@ func (h *UserHandler) FindPwdSendCode(c *gin.Context) {
 		return
 	}
 
-	// 生成验证码
-	code, err := h.authSvc.GenCode("findpwd", req.Email)
-	if err != nil || code == "" {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "发送失败，请稍后重试"})
+	// 发送验证码（邮件）
+	if _, err := h.authSvc.GenCode("findpwd", req.Email); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
 	}
-
-	// TODO: 实际发送邮件
-	log.Printf("[找回密码验证码] 邮箱: %s, 验证码: %s", req.Email, code)
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "验证码已发送"})
 }

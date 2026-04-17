@@ -231,7 +231,7 @@ export function getPayTypeList(): Promise<ApiResponse> {
 }
 
 // 支付类型操作
-export function payTypeOp(data: { action: string; id?: number; name?: string; device?: number; showname?: string; status?: number }): Promise<ApiResponse> {
+export function payTypeOp(data: { action: string; id?: number; name?: string; showname?: string; status?: number }): Promise<ApiResponse> {
   return request.post('/admin/paytype/op', data)
 }
 

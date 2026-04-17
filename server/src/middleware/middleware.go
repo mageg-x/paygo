@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -90,9 +91,56 @@ func GetRealIP(c *gin.Context) string {
 
 // GetClientIPCity 获取IP归属地
 func GetClientIPCity(ip string) string {
-	// TODO: 实现IP归属地查询
-	// 可以使用 ip2region 库
-	return "未知"
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return "未知"
+	}
+
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return "未知"
+	}
+
+	if parsed.IsLoopback() {
+		return "本地回环"
+	}
+
+	if parsed.IsLinkLocalUnicast() || parsed.IsLinkLocalMulticast() {
+		return "链路本地"
+	}
+
+	if isPrivateIP(parsed) {
+		return "内网地址"
+	}
+
+	return "公网IP"
+}
+
+func isPrivateIP(ip net.IP) bool {
+	// IPv4 私网网段
+	privateCIDRs := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"100.64.0.0/10", // CGNAT
+	}
+
+	for _, cidr := range privateCIDRs {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		if network.Contains(ip) {
+			return true
+		}
+	}
+
+	// IPv6 本地地址
+	if strings.HasPrefix(ip.String(), "fc") || strings.HasPrefix(ip.String(), "fd") {
+		return true
+	}
+
+	return false
 }
 
 // 管理员认证中间件

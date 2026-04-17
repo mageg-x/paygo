@@ -18,7 +18,7 @@
     <!-- 通道列表 -->
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm whitespace-nowrap">
           <thead>
             <tr class="bg-gray-50 border-b border-gray-100">
               <th class="px-4 py-3 text-left font-semibold text-gray-600">ID</th>
@@ -40,12 +40,12 @@
               <td class="px-4 py-3 text-gray-600">{{ ch.plugin_showname || ch.plugin }}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1.5">
-                  <SvgIcon :name="ch.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
+                  <SvgIcon :name="typeIcon(ch.type)" :size="16" />
                   <span class="text-sm">{{ typeName(ch.type) }}</span>
                 </div>
               </td>
               <td class="px-4 py-3 text-gray-500 text-xs">
-                <div v-if="ch.apptype_names">{{ ch.apptype_names }}</div>
+                <div v-if="ch.paymethod_names">{{ ch.paymethod_names }}</div>
                 <div v-else class="text-gray-400">未配置</div>
               </td>
               <td class="px-4 py-3 text-right">
@@ -76,7 +76,7 @@
               </td>
             </tr>
             <tr v-if="channels.length === 0">
-              <td colspan="9" class="px-4 py-12 text-center text-gray-400">
+              <td colspan="10" class="px-4 py-12 text-center text-gray-400">
                 <div class="flex flex-col items-center">
                   <svg class="w-12 h-12 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -107,17 +107,32 @@
               <label class="block text-sm font-medium text-gray-700 mb-1">支付类型</label>
               <select v-model="form.type"
                 class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option :value="1">支付宝</option>
-                <option :value="2">微信支付</option>
+                <option v-for="pt in payTypes" :key="pt.id" :value="pt.id">
+                  {{ pt.showname || pt.name || ('类型' + pt.id) }}
+                </option>
               </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">插件</label>
-              <select v-model="form.plugin"
+              <select v-model="form.plugin" @change="handlePluginChange"
                 class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">请选择插件</option>
                 <option v-for="p in plugins" :key="p.name" :value="p.name">{{ p.showname || p.name }}</option>
               </select>
+            </div>
+            <div class="col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">支付方式</label>
+              <div v-if="currentPluginMethods.length === 0"
+                class="px-3 py-2 text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                当前插件未提供可选支付方式，留空将按插件默认逻辑路由
+              </div>
+              <div v-else class="grid grid-cols-2 gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                <label v-for="[code, label] in currentPluginMethods" :key="code"
+                  class="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input v-model="selectedPaymethods" type="checkbox" :value="code" class="rounded border-gray-300" />
+                  <span>{{ code }} - {{ label }}</span>
+                </label>
+              </div>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">通道模式</label>
@@ -174,29 +189,54 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getChannelList, channelOp, getPluginList } from '@/api/admin'
+import { computed, ref, onMounted } from 'vue'
+import { getChannelList, channelOp, getPluginList, getPayTypeList } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
 
 const channels = ref<any[]>([])
 const plugins = ref<any[]>([])
+const payTypes = ref<any[]>([])
+const selectedPaymethods = ref<string[]>([])
 const showModal = ref(false)
 const isEdit = ref(false)
 const form = ref({
   id: 0,
   name: '',
   plugin: '',
-  type: 1,
+  type: 0,
   mode: 0,
   rate: 0.5,
   costrate: 0.3,
   daytop: 100000,
   paymin: 10,
   paymax: 5000,
-  apptype: '',
+  paymethod: '',
   status: 1
 })
+
+const currentPluginMethods = computed<[string, string][]>(() => {
+  const current = plugins.value.find((p: any) => p.name === form.value.plugin)
+  const selectMap: Record<string, string> = (current?.select || {}) as Record<string, string>
+  return Object.entries(selectMap).sort((a, b) => Number(a[0]) - Number(b[0]))
+})
+
+function parsePaymethod(value: string): string[] {
+  if (!value) return []
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+}
+
+function handlePluginChange() {
+  if (!form.value.plugin) {
+    selectedPaymethods.value = []
+    return
+  }
+  const available = new Set(currentPluginMethods.value.map(([code]) => code))
+  selectedPaymethods.value = selectedPaymethods.value.filter((code) => available.has(code))
+}
 
 async function fetchChannels() {
   try {
@@ -221,20 +261,39 @@ async function fetchPlugins() {
   }
 }
 
+async function fetchPayTypes() {
+  try {
+    const res = await getPayTypeList()
+    if (res.code === 0) {
+      payTypes.value = (res.data || []).map((item: any) => ({
+        ...item,
+        id: Number(item.id)
+      }))
+    }
+  } catch (error) {
+    console.error('获取支付类型失败:', error)
+  }
+}
+
 function showAddModal() {
+  if (payTypes.value.length === 0) {
+    ElMessage.warning('请先在支付类型管理中添加支付类型')
+    return
+  }
   isEdit.value = false
+  selectedPaymethods.value = []
   form.value = {
     id: 0,
     name: '',
     plugin: '',
-    type: 1,
+    type: Number(payTypes.value[0].id),
     mode: 0,
     rate: 0.5,
     costrate: 0.3,
     daytop: 100000,
     paymin: 10,
     paymax: 5000,
-    apptype: '',
+    paymethod: '',
     status: 1
   }
   showModal.value = true
@@ -242,6 +301,7 @@ function showAddModal() {
 
 function showEditModal(ch: any) {
   isEdit.value = true
+  selectedPaymethods.value = parsePaymethod(ch.paymethod || '')
   form.value = {
     id: ch.id,
     name: ch.name,
@@ -253,7 +313,7 @@ function showEditModal(ch: any) {
     daytop: ch.daytop,
     paymin: Number(ch.paymin) || 10,
     paymax: Number(ch.paymax) || 5000,
-    apptype: ch.apptype || '',
+    paymethod: ch.paymethod || '',
     status: ch.status
   }
   // 确保插件列表已加载
@@ -273,10 +333,16 @@ async function handleSave() {
     ElMessage.warning('请选择插件')
     return
   }
+  const paymethod = [...new Set(selectedPaymethods.value)].join(',')
+  if (currentPluginMethods.value.length > 0 && !paymethod) {
+    ElMessage.warning('请至少选择一种支付方式')
+    return
+  }
   try {
     const res = await channelOp({
       action: isEdit.value ? 'edit' : 'add',
-      ...form.value
+      ...form.value,
+      paymethod
     })
     ElMessage.success(res.msg || '保存成功')
     showModal.value = false
@@ -320,14 +386,27 @@ async function toggleStatus(ch: any) {
 }
 
 function typeName(type: number) {
-  const map: Record<number, string> = {
-    1: '支付宝',
-    2: '微信支付',
+  const pt = payTypes.value.find((item: any) => Number(item.id) === Number(type))
+  if (!pt) return '未知'
+  return pt.showname || pt.name || `类型${type}`
+}
+
+function typeIcon(type: number) {
+  const pt = payTypes.value.find((item: any) => Number(item.id) === Number(type))
+  const key = (pt?.name || '').toLowerCase()
+  const map: Record<string, string> = {
+    alipay: 'alipay',
+    wechatpay: 'wechatpay',
+    wxpay: 'wechatpay',
+    qqpay: 'qqpay',
+    unionpay: 'unionpay',
+    jdpay: 'jdpay'
   }
-  return map[type] || '未知'
+  return map[key] || 'creditcard'
 }
 
 onMounted(() => {
+  fetchPayTypes()
   fetchChannels()
   fetchPlugins()
 })

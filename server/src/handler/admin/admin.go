@@ -554,8 +554,8 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 		Name           string            `json:"name"`
 		Rate           float64           `json:"rate"`
 		Status         int               `json:"status"`
-		Apptype        string            `json:"apptype"`
-		ApptypeNames   string            `json:"apptype_names"` // 支付方式名称列表
+		Paymethod      string            `json:"paymethod"`
+		PaymethodNames string            `json:"paymethod_names"` // 支付方式名称列表
 		Daytop         int               `json:"daytop"`
 		Daystatus      int               `json:"daystatus"`
 		Paymin         string            `json:"paymin"`
@@ -578,7 +578,7 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 			Name:      ch.Name,
 			Rate:      ch.Rate,
 			Status:    ch.Status,
-			Apptype:   ch.Apptype,
+			Paymethod: ch.Paymethod,
 			Daytop:    ch.Daytop,
 			Daystatus: ch.Daystatus,
 			Paymin:    ch.Paymin,
@@ -607,17 +607,18 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 			result[i].PluginSelect = selectMap
 		}
 
-		// 转换 apptype 数字为名称
-		if ch.Apptype != "" && selectMap != nil {
+		// 转换支付方式编号为名称
+		if ch.Paymethod != "" && selectMap != nil {
 			names := make([]string, 0)
-			codes := strings.Split(ch.Apptype, ",")
+			codes := strings.Split(ch.Paymethod, ",")
 			for _, code := range codes {
 				code = strings.TrimSpace(code)
 				if name, ok := selectMap[code]; ok {
 					names = append(names, name)
 				}
 			}
-			result[i].ApptypeNames = strings.Join(names, ",")
+			namesText := strings.Join(names, ",")
+			result[i].PaymethodNames = namesText
 		}
 	}
 
@@ -631,20 +632,20 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 // AJAX: 通道操作
 func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
 	var req struct {
-		Action   string  `json:"action"`
-		ID       uint    `json:"id"`
-		Name     string  `json:"name"`
-		Plugin   string  `json:"plugin"`
-		Type     int     `json:"type"`
-		Mode     int     `json:"mode"`
-		Rate     float64 `json:"rate"`
-		Costrate float64 `json:"costrate"`
-		Daytop   int     `json:"daytop"`
-		Paymin   float64 `json:"paymin"`
-		Paymax   float64 `json:"paymax"`
-		Apptype  string  `json:"apptype"`
-		Status   int     `json:"status"`
-		Config   string  `json:"config"`
+		Action    string  `json:"action"`
+		ID        uint    `json:"id"`
+		Name      string  `json:"name"`
+		Plugin    string  `json:"plugin"`
+		Type      int     `json:"type"`
+		Mode      int     `json:"mode"`
+		Rate      float64 `json:"rate"`
+		Costrate  float64 `json:"costrate"`
+		Daytop    int     `json:"daytop"`
+		Paymin    float64 `json:"paymin"`
+		Paymax    float64 `json:"paymax"`
+		Paymethod string  `json:"paymethod"`
+		Status    int     `json:"status"`
+		Config    string  `json:"config"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -657,18 +658,18 @@ func (h *AdminHandler) AjaxChannelOp(c *gin.Context) {
 	case "add", "edit":
 		log.Printf("[channel_op] action=%s, name=%s, plugin=%s, type=%d", req.Action, req.Name, req.Plugin, req.Type)
 		channel := model.Channel{
-			Name:     req.Name,
-			Plugin:   req.Plugin,
-			Type:     req.Type,
-			Mode:     req.Mode,
-			Rate:     req.Rate,
-			Costrate: req.Costrate,
-			Daytop:   req.Daytop,
-			Paymin:   strconv.FormatFloat(req.Paymin, 'f', 2, 64),
-			Paymax:   strconv.FormatFloat(req.Paymax, 'f', 2, 64),
-			Apptype:  req.Apptype,
-			Status:   req.Status,
-			Config:   req.Config,
+			Name:      req.Name,
+			Plugin:    req.Plugin,
+			Type:      req.Type,
+			Mode:      req.Mode,
+			Rate:      req.Rate,
+			Costrate:  req.Costrate,
+			Daytop:    req.Daytop,
+			Paymin:    strconv.FormatFloat(req.Paymin, 'f', 2, 64),
+			Paymax:    strconv.FormatFloat(req.Paymax, 'f', 2, 64),
+			Paymethod: strings.TrimSpace(req.Paymethod),
+			Status:    req.Status,
+			Config:    req.Config,
 		}
 
 		var err error
@@ -879,6 +880,25 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 		if cfg == "" {
 			cfg = "{}"
 		}
+
+		// 在配置保存现场做校验，避免“测试通过但下单失败”的配置偏差
+		if cfg != "{}" {
+			p := plugin.GetHandler(req.Name)
+			if p == nil {
+				c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "插件不存在"})
+				return
+			}
+			if tester, ok := p.(interface {
+				TestConfig(config string) (bool, string)
+			}); ok {
+				success, msg := tester.TestConfig(cfg)
+				if !success {
+					c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "配置校验失败: " + msg})
+					return
+				}
+			}
+		}
+
 		result := config.DB.Model(&model.Plugin{}).Where("name = ?", req.Name).Update("config", cfg)
 		if result.Error != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
@@ -886,6 +906,29 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 		}
 		log.Printf("[插件配置保存] name=%s", req.Name)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "配置已保存"})
+		return
+
+	case "test_config":
+		p := plugin.GetHandler(req.Name)
+		if p == nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "插件不存在"})
+			return
+		}
+
+		tester, ok := p.(interface {
+			TestConfig(config string) (bool, string)
+		})
+		if !ok {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "该插件不支持配置测试"})
+			return
+		}
+
+		success, msg := tester.TestConfig(req.Config)
+		if success {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": msg})
+		} else {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": msg})
+		}
 		return
 	}
 
@@ -1077,11 +1120,79 @@ func (h *AdminHandler) AjaxOrderList(c *gin.Context) {
 	query.Count(&total)
 	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("addtime DESC").Find(&orders)
 
+	// 组装支付类型名称，避免前端显示“未知”
+	typeNameMap := make(map[int]string)
+	var payTypes []model.PayType
+	if err := config.DB.Find(&payTypes).Error; err == nil {
+		for _, pt := range payTypes {
+			name := strings.TrimSpace(pt.Showname)
+			if name == "" {
+				name = strings.TrimSpace(pt.Name)
+			}
+			if name != "" {
+				typeNameMap[int(pt.ID)] = name
+			}
+		}
+	}
+
+	channelPluginMap := make(map[int]string)
+	channelIDs := make([]int, 0, len(orders))
+	channelIDSeen := make(map[int]struct{}, len(orders))
+	for _, o := range orders {
+		if o.Channel <= 0 {
+			continue
+		}
+		if _, ok := channelIDSeen[o.Channel]; ok {
+			continue
+		}
+		channelIDSeen[o.Channel] = struct{}{}
+		channelIDs = append(channelIDs, o.Channel)
+	}
+	if len(channelIDs) > 0 {
+		var channels []model.Channel
+		if err := config.DB.Where("id IN ?", channelIDs).Find(&channels).Error; err == nil {
+			for _, ch := range channels {
+				channelPluginMap[int(ch.ID)] = strings.TrimSpace(ch.Plugin)
+			}
+		}
+	}
+
+	fallbackTypeNameByPlugin := func(pluginName string) string {
+		switch strings.ToLower(strings.TrimSpace(pluginName)) {
+		case "alipay":
+			return "支付宝"
+		case "wxpay":
+			return "微信支付"
+		default:
+			return ""
+		}
+	}
+
+	type orderWithTypeName struct {
+		model.Order
+		Typename string `json:"typename"`
+	}
+
+	respData := make([]orderWithTypeName, 0, len(orders))
+	for _, o := range orders {
+		typeName := typeNameMap[o.Type]
+		if typeName == "" {
+			typeName = fallbackTypeNameByPlugin(channelPluginMap[o.Channel])
+		}
+		if typeName == "" {
+			typeName = fmt.Sprintf("类型%d", o.Type)
+		}
+		respData = append(respData, orderWithTypeName{
+			Order:    o,
+			Typename: typeName,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code":  0,
 		"msg":   "",
 		"count": total,
-		"data":  orders,
+		"data":  respData,
 	})
 }
 
@@ -1098,6 +1209,7 @@ func (h *AdminHandler) AjaxOrderOp(c *gin.Context) {
 	}
 
 	var err error
+	successMsg := "操作成功"
 	switch req.Action {
 	case "refund":
 		if req.Money <= 0 {
@@ -1123,6 +1235,21 @@ func (h *AdminHandler) AjaxOrderOp(c *gin.Context) {
 		err = h.orderSvc.Unfreeze(req.TradeNo)
 	case "notify":
 		err = h.orderSvc.RetryNotify(req.TradeNo)
+	case "refresh":
+		outcome, e := service.RefreshOrderStatus(req.TradeNo)
+		if e != nil {
+			err = e
+			break
+		}
+		statusText := strings.TrimSpace(outcome.Status)
+		if statusText == "" {
+			statusText = "UNKNOWN"
+		}
+		if outcome.Filled {
+			successMsg = fmt.Sprintf("刷新完成：上游已支付，订单已更新（%s）", statusText)
+		} else {
+			successMsg = fmt.Sprintf("刷新完成：上游状态 %s（未支付）", statusText)
+		}
 	}
 
 	if err != nil {
@@ -1130,7 +1257,7 @@ func (h *AdminHandler) AjaxOrderOp(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "操作成功"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": successMsg})
 }
 
 // AJAX: 获取商户列表
@@ -1934,6 +2061,8 @@ func getCronTask(name string) func() {
 		return func() { service.AutoSettleTask() }
 	case "retry_notify":
 		return func() { service.RetryNotifyTask() }
+	case "order_query":
+		return func() { service.OrderQueryTask() }
 	case "risk_check":
 		return func() { service.RiskCheckTask() }
 	case "cleanup":
@@ -1956,7 +2085,6 @@ func (h *AdminHandler) AjaxPayTypeOp(c *gin.Context) {
 		Action   string `json:"action"` // add, edit, delete
 		ID       uint   `json:"id"`
 		Name     string `json:"name"`
-		Device   int    `json:"device"`
 		Showname string `json:"showname"`
 		Status   int    `json:"status"`
 	}
@@ -1971,7 +2099,6 @@ func (h *AdminHandler) AjaxPayTypeOp(c *gin.Context) {
 		log.Printf("[paytype_op] action=%s, name=%s, showname=%s", req.Action, req.Name, req.Showname)
 		pt := model.PayType{
 			Name:     req.Name,
-			Device:   req.Device,
 			Showname: req.Showname,
 			Status:   req.Status,
 		}

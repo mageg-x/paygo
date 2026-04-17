@@ -2,17 +2,22 @@ package service
 
 import (
 	"crypto/md5"
+	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"math/rand"
+	"net/mail"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"paygo/src/config"
+	"paygo/src/middleware"
 	"paygo/src/model"
 )
 
@@ -246,34 +251,68 @@ func (s *AuthService) VerifyCode(scene, to, code string) bool {
 
 // 生成验证码
 func (s *AuthService) GenCode(scene, to string) (string, error) {
-	// 生成6位数字验证码
-	code := fmt.Sprintf("%06d", rand.Intn(1000000))
+	to = strings.TrimSpace(to)
+	if to == "" {
+		return "", errors.New("接收地址不能为空")
+	}
+
+	now := time.Now().Unix()
+
+	// 发送频控：60秒内仅允许发送一次
+	var last model.RegCode
+	if err := config.DB.Where("scene = ? AND `to` = ?", scene, to).Order("time DESC").First(&last).Error; err == nil {
+		if now-int64(last.Time) < 60 {
+			return "", errors.New("发送过于频繁，请稍后重试")
+		}
+	}
+
+	// 生成6位数字验证码（加密随机数）
+	n, err := crand.Int(crand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return "", errors.New("验证码生成失败")
+	}
+	code := fmt.Sprintf("%06d", n.Int64())
+
+	targetType := 0
+	if isEmailAddress(to) {
+		targetType = 1
+	} else if isPhoneNumber(to) {
+		targetType = 2
+	} else {
+		return "", errors.New("接收地址格式错误")
+	}
 
 	// 存储验证码
 	regcode := &model.RegCode{
 		Scene:  scene,
+		Type:   targetType,
 		To:     to,
 		Code:   code,
-		Time:   int(time.Now().Unix()),
+		Time:   int(now),
 		Status: 0,
 	}
 
-	result := config.DB.Create(regcode)
-	if result.Error != nil {
-		log.Printf("[gen_code_failed] scene=%s, to=%s, error=%s", scene, to, result.Error.Error())
-		return "", result.Error
+	if err := config.DB.Create(regcode).Error; err != nil {
+		log.Printf("[gen_code_failed] scene=%s, to=%s, reason=save code failed, error=%s", scene, to, err.Error())
+		return "", err
 	}
 
-	// TODO: 发送验证码（邮件/短信）
+	// 发送验证码；若发送失败，删除刚写入的验证码记录，避免无效验证码残留
+	if err := s.sendCode(to, code); err != nil {
+		config.DB.Delete(&model.RegCode{}, regcode.ID)
+		log.Printf("[gen_code_failed] scene=%s, to=%s, reason=send failed, error=%s", scene, to, err.Error())
+		return "", err
+	}
 
+	log.Printf("[gen_code_success] scene=%s, to=%s", scene, to)
 	return code, nil
 }
 
 // 获取配置
 func (s *AuthService) GetConfig(k string) string {
 	var cfg model.Config
-	result := config.DB.Where("k = ?", k).First(&cfg)
-	if result.Error != nil {
+	result := config.DB.Where("k = ?", k).Limit(1).Find(&cfg)
+	if result.Error != nil || result.RowsAffected == 0 {
 		return ""
 	}
 	return cfg.V
@@ -307,7 +346,7 @@ func (s *AuthService) SaveConfig(k, v string) error {
 
 // 记录日志
 func (s *AuthService) AddLog(uid uint, logType, data, ip string) {
-	city := ""
+	city := middleware.GetClientIPCity(ip)
 	log := &model.Log{
 		UID:  uid,
 		Type: logType,
@@ -317,6 +356,33 @@ func (s *AuthService) AddLog(uid uint, logType, data, ip string) {
 		Data: data,
 	}
 	config.DB.Create(log)
+}
+
+func (s *AuthService) sendCode(to, code string) error {
+	if isEmailAddress(to) {
+		emailSvc := NewEmailService()
+		return emailSvc.SendCode(to, code)
+	}
+
+	if isPhoneNumber(to) {
+		smsSvc := GetSmsService()
+		if smsSvc == nil {
+			return errors.New("短信服务未启用")
+		}
+		return smsSvc.SendCode(to, code)
+	}
+
+	return errors.New("不支持的接收地址")
+}
+
+func isEmailAddress(s string) bool {
+	_, err := mail.ParseAddress(s)
+	return err == nil
+}
+
+func isPhoneNumber(s string) bool {
+	phoneRegexp := regexp.MustCompile(`^\d{6,20}$`)
+	return phoneRegexp.MatchString(s)
 }
 
 // 验证回调签名

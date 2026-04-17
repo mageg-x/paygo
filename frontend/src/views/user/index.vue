@@ -110,7 +110,7 @@
         <router-link to="/user/orders" class="text-sm text-blue-600 hover:text-blue-700">查看全部</router-link>
       </div>
       <div class="card-body">
-        <table class="table">
+        <table class="table whitespace-nowrap">
           <thead>
             <tr>
               <th>订单号</th>

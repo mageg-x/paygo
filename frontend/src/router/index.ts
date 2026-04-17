@@ -150,6 +150,11 @@ const routes: RouteRecordRaw[] = [
         path: 'profit',
         name: 'AdminProfit',
         component: () => import('@/views/admin/profit.vue')
+      },
+      {
+        path: 'paytest',
+        name: 'AdminPayTest',
+        component: () => import('@/views/admin/paytest.vue')
       }
     ]
   },
@@ -239,6 +244,11 @@ const routes: RouteRecordRaw[] = [
         path: 'transfer-add',
         name: 'UserTransferAdd',
         component: () => import('@/views/user/transfer-add.vue')
+      },
+      {
+        path: 'paytest',
+        name: 'UserPayTest',
+        component: () => import('@/views/user/paytest.vue')
       }
     ]
   }

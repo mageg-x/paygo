@@ -6,11 +6,11 @@ import (
 
 // 订单状态常量
 const (
-	OrderStatusPending   = 0 // 待支付
-	OrderStatusPaid      = 1 // 已支付
-	OrderStatusRefunded  = 2 // 已退款
-	OrderStatusFrozen    = 3 // 已冻结
-	OrderStatusPreauth   = 4 // 预授权
+	OrderStatusPending  = 0 // 待支付
+	OrderStatusPaid     = 1 // 已支付
+	OrderStatusRefunded = 2 // 已退款
+	OrderStatusFrozen   = 3 // 已冻结
+	OrderStatusPreauth  = 4 // 预授权
 )
 
 // 订单表
@@ -31,14 +31,14 @@ type Order struct {
 	NotifyURL   string    `gorm:"column:notify_url" json:"notify_url"`
 	ReturnURL   string    `gorm:"column:return_url" json:"return_url"`
 	Param       string    `gorm:"column:param" json:"param"`
-	Addtime     time.Time `gorm:"column:addtime" json:"addtime"`
+	Addtime     time.Time `gorm:"column:addtime;index:idx_order_status_addtime,priority:2" json:"addtime"`
 	Endtime     time.Time `gorm:"column:endtime" json:"endtime"`
 	Date        string    `gorm:"column:date" json:"date"`
 	Domain      string    `gorm:"column:domain" json:"domain"`
 	Domain2     string    `gorm:"column:domain2" json:"domain2"`
 	IP          string    `gorm:"column:ip" json:"ip"`
 	Buyer       string    `gorm:"column:buyer" json:"buyer"`
-	Status      int       `gorm:"column:status" json:"status"`
+	Status      int       `gorm:"column:status;index:idx_order_status_addtime,priority:1" json:"status"`
 	Notify      int       `gorm:"column:notify" json:"notify"`
 	Notifytime  time.Time `gorm:"column:notifytime" json:"notifytime"`
 	Invite      uint      `gorm:"column:invite" json:"invite"`

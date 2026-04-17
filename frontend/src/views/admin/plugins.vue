@@ -182,9 +182,15 @@
             </div>
           </div>
 
-          <div class="flex justify-end gap-3 mt-6">
+          <div class="flex justify-between gap-3 mt-6">
             <button @click="showConfigModal = false"
               class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">关闭</button>
+            <button v-if="currentPlugin?.name === 'alipay' || currentPlugin?.name === 'wxpay'"
+              @click="testPluginConfig"
+              class="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2">
+              <TestIcon class="w-4 h-4" />
+              测试配置
+            </button>
             <button @click="savePluginConfig" :disabled="!currentPlugin"
               class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">保存配置</button>
           </div>
@@ -201,6 +207,7 @@ import { getPluginList, pluginOp } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
 import JsonEditor from '@/components/json-editor.vue'
+import { Beaker } from 'lucide-vue-next'
 
 const plugins = ref<any[]>([])
 const showConfigModal = ref(false)
@@ -210,6 +217,7 @@ const certInput = ref<HTMLInputElement | null>(null)
 const certFileName = ref('')
 const certPath = ref('')
 const uploading = ref(false)
+const TestIcon = Beaker
 
 function getPluginBgClass(types: string) {
   if (types?.includes('支付宝')) return 'bg-blue-50'
@@ -258,6 +266,26 @@ function showConfig(p: any) {
   certFileName.value = ''
   certPath.value = ''
   showConfigModal.value = true
+}
+
+async function testPluginConfig() {
+  if (!currentPlugin.value) return
+  try {
+    const res = await pluginOp({
+      action: 'test_config',
+      name: currentPlugin.value.name,
+      config: pluginConfig.value
+    })
+    if (res.code === 0) {
+      ElMessage.success(res.msg || '测试成功')
+    } else {
+      ElMessage.error(res.msg || '测试失败')
+    }
+  } catch (error) {
+    console.error('测试失败:', error)
+    const msg = (error as any)?.message || '测试失败，请检查网络连接'
+    ElMessage.error(`测试失败: ${msg}`)
+  }
 }
 
 async function savePluginConfig() {

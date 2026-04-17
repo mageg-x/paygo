@@ -63,7 +63,7 @@
         <h3 class="text-lg font-semibold text-gray-900">邀请记录</h3>
       </div>
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm whitespace-nowrap">
           <thead>
             <tr class="bg-gray-50 border-b border-gray-100">
               <th class="px-4 py-3 text-left font-semibold text-gray-600">商户ID</th>

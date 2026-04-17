@@ -34,6 +34,9 @@ type Plugin interface {
 
 	// 转账查询
 	TransferQuery(params map[string]interface{}) (TransferQueryResult, error)
+
+	// 测试配置
+	TestConfig(config string) (bool, string)
 }
 
 // 插件信息

@@ -23,7 +23,7 @@
 
     <div class="card">
       <div class="card-body">
-        <table class="table">
+        <table class="table whitespace-nowrap">
           <thead>
             <tr>
               <th>订单号</th>

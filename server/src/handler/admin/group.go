@@ -46,11 +46,11 @@ func (h *GroupHandler) AjaxGroupList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":           0,
-		"msg":            "",
-		"count":          total,
-		"data":           groups,
-		"default_gid":    defaultGroupID,
+		"code":        0,
+		"msg":         "",
+		"count":       total,
+		"data":        groups,
+		"default_gid": defaultGroupID,
 	})
 }
 
@@ -67,7 +67,7 @@ func (h *GroupHandler) AjaxGroupOp(c *gin.Context) {
 		Expire     int     `json:"expire"`
 		SettleOpen int     `json:"settle_open"`
 		SettleType int     `json:"settle_type"`
-		SettleRate float64 `json:"settle_rate"` // 前端可能发送数字
+		SettleRate any     `json:"settle_rate"` // 兼容数字/字符串
 		Settings   string  `json:"settings"`
 		Config     string  `json:"config"`
 	}
@@ -84,6 +84,13 @@ func (h *GroupHandler) AjaxGroupOp(c *gin.Context) {
 		return
 	}
 
+	settleRate, err := parseSettleRate(req.SettleRate)
+	if err != nil {
+		log.Printf("[用户组操作参数错误] settle_rate=%v, error=%s", req.SettleRate, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误：结算费率格式错误"})
+		return
+	}
+
 	switch req.Action {
 	case "add":
 		group := model.Group{
@@ -95,7 +102,7 @@ func (h *GroupHandler) AjaxGroupOp(c *gin.Context) {
 			Expire:     req.Expire,
 			SettleOpen: req.SettleOpen,
 			SettleType: req.SettleType,
-			SettleRate: strconv.FormatFloat(req.SettleRate, 'f', 2, 64),
+			SettleRate: strconv.FormatFloat(settleRate, 'f', 2, 64),
 			Settings:   req.Settings,
 			Config:     req.Config,
 		}
@@ -118,7 +125,7 @@ func (h *GroupHandler) AjaxGroupOp(c *gin.Context) {
 			"expire":      req.Expire,
 			"settle_open": req.SettleOpen,
 			"settle_type": req.SettleType,
-			"settle_rate": strconv.FormatFloat(req.SettleRate, 'f', 2, 64),
+			"settle_rate": strconv.FormatFloat(settleRate, 'f', 2, 64),
 			"settings":    req.Settings,
 			"config":      req.Config,
 		}
@@ -184,5 +191,27 @@ func (h *GroupHandler) AjaxGroupOp(c *gin.Context) {
 	default:
 		log.Printf("[用户组操作未知动作] action=%s", req.Action)
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+	}
+}
+
+func parseSettleRate(v any) (float64, error) {
+	switch t := v.(type) {
+	case nil:
+		return 0, nil
+	case float64:
+		return t, nil
+	case float32:
+		return float64(t), nil
+	case int:
+		return float64(t), nil
+	case int64:
+		return float64(t), nil
+	case string:
+		if t == "" {
+			return 0, nil
+		}
+		return strconv.ParseFloat(t, 64)
+	default:
+		return 0, strconv.ErrSyntax
 	}
 }

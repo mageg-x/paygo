@@ -47,7 +47,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminLogout } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import { Home, Users, FileText, Wallet, ArrowLeftRight, Strikethrough, Puzzle, Settings, User, LogOut, Ticket, Shield, Ban, Globe, Volume2, FileSearch, Key, Timer, MessageCircle, Trash2, Download, CreditCard, RefreshCw, Coins } from 'lucide-vue-next'
+import { Home, Users, FileText, Wallet, ArrowLeftRight, Strikethrough, Puzzle, Settings, User, LogOut, Ticket, Shield, Ban, Globe, Volume2, FileSearch, Key, Timer, MessageCircle, Trash2, Download, CreditCard, RefreshCw, Coins, QrCode } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,6 +61,7 @@ const menus = [
   { path: '/admin/settles', name: '结算管理', icon: Wallet },
   { path: '/admin/transfers', name: '转账管理', icon: ArrowLeftRight },
   { path: '/admin/channels', name: '通道管理', icon: Strikethrough },
+  { path: '/admin/paytest', name: '通道测试', icon: QrCode },
   { path: '/admin/invitecodes', name: '邀请码', icon: Ticket },
   { path: '/admin/plugins', name: '插件管理', icon: Puzzle },
   { path: '/admin/risk', name: '风控管理', icon: Shield },

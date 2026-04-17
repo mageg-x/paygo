@@ -43,6 +43,151 @@ type SubmitParams struct {
 	Method     string // web/jump/jsapi/scan
 }
 
+func parsePaymethodCodes(paymethod string) []string {
+	if paymethod == "" {
+		return nil
+	}
+	parts := strings.Split(paymethod, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		code := strings.TrimSpace(p)
+		if code == "" {
+			continue
+		}
+		result = append(result, code)
+	}
+	return result
+}
+
+func pickByPriority(enabledCodes []string, priority []string) string {
+	if len(enabledCodes) == 0 || len(priority) == 0 {
+		return ""
+	}
+	enabled := make(map[string]struct{}, len(enabledCodes))
+	for _, code := range enabledCodes {
+		enabled[code] = struct{}{}
+	}
+	for _, code := range priority {
+		if _, ok := enabled[code]; ok {
+			return code
+		}
+	}
+	return ""
+}
+
+func mapAlipayPaymethodToMethod(code string) string {
+	switch code {
+	case "1":
+		return "web"
+	case "2":
+		return "wap"
+	case "3":
+		return "scan"
+	case "6":
+		return "jsapi"
+	case "7":
+		return "app"
+	default:
+		return ""
+	}
+}
+
+func mapWxpayPaymethodToMethod(code string) string {
+	switch code {
+	case "1":
+		return "scan"
+	case "2", "4":
+		return "jsapi"
+	case "3":
+		return "h5"
+	case "5":
+		return "app"
+	default:
+		return ""
+	}
+}
+
+func deviceClass(device string) string {
+	d := strings.ToLower(strings.TrimSpace(device))
+	switch d {
+	case "app", "ios", "android":
+		return "app"
+	case "mobile", "h5", "wap":
+		return "mobile"
+	default:
+		return "pc"
+	}
+}
+
+func resolveSubmitMethod(channel model.Channel, params SubmitParams) (string, error) {
+	if strings.TrimSpace(params.Method) != "" {
+		return params.Method, nil
+	}
+
+	codes := parsePaymethodCodes(channel.Paymethod)
+	dc := deviceClass(params.Device)
+
+	switch channel.Plugin {
+	case "alipay":
+		if len(codes) == 0 {
+			if dc == "app" || dc == "mobile" {
+				return "wap", nil
+			}
+			return "web", nil
+		}
+
+		var priority []string
+		switch dc {
+		case "app":
+			priority = []string{"7", "6", "2", "1", "3"}
+		case "mobile":
+			priority = []string{"2", "6", "7", "1", "3"}
+		default:
+			priority = []string{"1", "3", "2", "6", "7"}
+		}
+
+		code := pickByPriority(codes, priority)
+		if code == "" {
+			return "", errors.New("通道未配置可用的支付宝支付方式")
+		}
+		method := mapAlipayPaymethodToMethod(code)
+		if method == "" {
+			return "", errors.New("当前支付宝支付方式暂未实现，请在通道中改用 1/2/3/6/7")
+		}
+		return method, nil
+
+	case "wxpay":
+		if len(codes) == 0 {
+			if dc == "app" || dc == "mobile" {
+				return "h5", nil
+			}
+			return "scan", nil
+		}
+
+		var priority []string
+		switch dc {
+		case "app":
+			priority = []string{"5", "3", "2", "4", "1"}
+		case "mobile":
+			priority = []string{"3", "2", "4", "5", "1"}
+		default:
+			priority = []string{"1", "3", "2", "4", "5"}
+		}
+
+		code := pickByPriority(codes, priority)
+		if code == "" {
+			return "", errors.New("通道未配置可用的微信支付方式")
+		}
+		method := mapWxpayPaymethodToMethod(code)
+		if method == "" {
+			return "", errors.New("当前微信支付方式暂未实现")
+		}
+		return method, nil
+	default:
+		return "", nil
+	}
+}
+
 // 获取可用支付方式
 func (s *PaymentService) GetAvailableTypes(uid uint) ([]model.PayType, error) {
 	// 获取商户的用户组
@@ -194,7 +339,7 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 		return nil, errors.New("商户不存在")
 	}
 
-	if user.Status != 0 {
+	if user.Status != 1 {
 		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, reason=merchant disabled, status=%d", params.UID, params.OutTradeNo, user.Status)
 		return nil, errors.New("商户已被禁用")
 	}
@@ -296,6 +441,12 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 		return nil, errors.New("支付通道插件不存在")
 	}
 
+	method, err := resolveSubmitMethod(*channel, params)
+	if err != nil {
+		log.Printf("[submit_payment_failed] uid=%d, out_trade_no=%s, channel_id=%d, plugin=%s, paymethod=%s, reason=resolve method failed, error=%s", params.UID, params.OutTradeNo, channel.ID, channel.Plugin, channel.Paymethod, err.Error())
+		return nil, err
+	}
+
 	// 构造插件参数
 	pluginParams := map[string]interface{}{
 		"trade_no":     tradeNo,
@@ -307,8 +458,8 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 		"param":        params.Param,
 		"ip":           params.IP,
 		"device":       params.Device,
-		"method":       params.Method,
-		"channel":      channel,
+		"method":       method,
+		"channel":      *channel,
 	}
 
 	// 调用插件提交
@@ -392,33 +543,11 @@ func (s *PaymentService) HandleReturn(tradeNo string, pluginName string, c *gin.
 
 // 退款
 func (s *PaymentService) Refund(tradeNo string, money float64) error {
-	order, err := s.orderSvc.GetOrder(tradeNo)
-	if err != nil {
-		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=get order failed, error=%s", tradeNo, money, err.Error())
+	if err := s.orderSvc.Refund(tradeNo, money); err != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=order refund failed, error=%s", tradeNo, money, err.Error())
 		return err
 	}
-
-	// 获取通道的插件名称
-	var channel model.Channel
-	if config.DB.First(&channel, order.Channel).Error != nil {
-		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=channel not found")
-		return errors.New("通道不存在")
-	}
-
-	pluginHandler := plugin.GetHandler(channel.Plugin)
-	if pluginHandler == nil {
-		log.Printf("[refund_failed] trade_no=%s, money=%.2f, plugin=%s, reason=plugin not found", tradeNo, money, channel.Plugin)
-		return errors.New("插件不存在")
-	}
-
-	_, err = pluginHandler.Refund(map[string]interface{}{
-		"trade_no": tradeNo,
-		"money":    money,
-	})
-	if err != nil {
-		log.Printf("[refund_failed] trade_no=%s, money=%.2f, plugin=%s, reason=plugin refund failed, error=%s", tradeNo, money, channel.Plugin, err.Error())
-	}
-	return err
+	return nil
 }
 
 // 获取通道配置

@@ -144,6 +144,7 @@ func SetupRouter() *gin.Engine {
 		// 商户后台 API - 公开
 		api.POST("/user/login", userHandler.Login)
 		api.POST("/user/reg", userHandler.Register)
+		api.POST("/user/reg/send", userHandler.RegSendCode)
 		api.POST("/user/findpwd/send", userHandler.FindPwdSendCode)
 		api.POST("/user/findpwd/reset", userHandler.FindPwdReset)
 

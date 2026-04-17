@@ -18,13 +18,12 @@
     <!-- 类型列表 -->
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm whitespace-nowrap">
           <thead>
             <tr class="bg-gray-50 border-b border-gray-100">
               <th class="px-4 py-3 text-left font-semibold text-gray-600">ID</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600">标识</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600">显示名称</th>
-              <th class="px-4 py-3 text-left font-semibold text-gray-600">设备类型</th>
               <th class="px-4 py-3 text-center font-semibold text-gray-600">状态</th>
               <th class="px-4 py-3 text-center font-semibold text-gray-600">操作</th>
             </tr>
@@ -39,7 +38,6 @@
                 </div>
               </td>
               <td class="px-4 py-3 text-gray-600">{{ pt.showname || '-' }}</td>
-              <td class="px-4 py-3 text-gray-500">{{ deviceName(pt.device) }}</td>
               <td class="px-4 py-3 text-center">
                 <span
                   :class="['inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', pt.status ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">
@@ -60,7 +58,7 @@
               </td>
             </tr>
             <tr v-if="payTypes.length === 0">
-              <td colspan="6" class="px-4 py-12 text-center text-gray-400">
+              <td colspan="5" class="px-4 py-12 text-center text-gray-400">
                 <div class="flex flex-col items-center">
                   <svg class="w-12 h-12 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -91,16 +89,6 @@
               <label class="block text-sm font-medium text-gray-700 mb-1">显示名称</label>
               <input v-model="form.showname" type="text" placeholder="如：支付宝、微信支付"
                 class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">设备类型</label>
-              <select v-model="form.device"
-                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option :value="0">PC</option>
-                <option :value="1">手机H5</option>
-                <option :value="2">APP</option>
-                <option :value="3">全端</option>
-              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
@@ -135,7 +123,6 @@ const isEdit = ref(false)
 const form = ref({
   id: 0,
   name: '',
-  device: 0,
   showname: '',
   status: 1
 })
@@ -156,7 +143,6 @@ function showAddModal() {
   form.value = {
     id: 0,
     name: '',
-    device: 0,
     showname: '',
     status: 1
   }
@@ -168,7 +154,6 @@ function showEditModal(pt: any) {
   form.value = {
     id: pt.id,
     name: pt.name,
-    device: pt.device,
     showname: pt.showname || '',
     status: pt.status
   }
@@ -235,16 +220,6 @@ function getIconName(name: string): string {
     jdpay: 'jdpay'
   }
   return map[name] || 'creditcard'
-}
-
-function deviceName(device: number): string {
-  const map: Record<number, string> = {
-    0: 'PC',
-    1: '手机H5',
-    2: 'APP',
-    3: '全端'
-  }
-  return map[device] || '未知'
 }
 
 onMounted(() => {

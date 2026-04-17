@@ -39,7 +39,7 @@
     <!-- 订单列表 -->
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm whitespace-nowrap">
           <thead>
             <tr class="bg-gray-50 border-b border-gray-100">
               <th class="px-4 py-3 text-left font-semibold text-gray-600">订单号</th>
@@ -62,8 +62,8 @@
               <td class="px-4 py-3 text-right font-semibold text-emerald-600">￥{{ order.money }}</td>
               <td class="px-4 py-3 text-center">
                 <div class="flex items-center justify-center gap-1">
-                  <SvgIcon :name="order.type === 1 ? 'alipay' : 'wechatpay'" :size="16" />
-                  <span class="text-xs font-medium" :class="order.type === 1 ? 'text-blue-600' : 'text-green-600'">{{
+                  <SvgIcon :name="payIcon(order)" :size="16" />
+                  <span class="text-xs font-medium" :class="payTextClass(order)">{{
                     order.typename || '未知' }}</span>
                 </div>
               </td>
@@ -80,6 +80,8 @@
                     class="px-3 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors">退款</button>
                 </template>
                 <template v-if="order.status === 0">
+                  <button @click="handleOp('refresh', order.trade_no)"
+                    class="mr-1 px-3 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors">刷新状态</button>
                   <button @click="handleOp('freeze', order.trade_no)"
                     class="px-3 py-1 text-xs text-yellow-600 hover:bg-yellow-50 rounded transition-colors">冻结</button>
                 </template>
@@ -171,6 +173,20 @@ function statusClass(s: number) {
   return map[s] || 'bg-gray-100 text-gray-700'
 }
 
+function payIcon(order: Order) {
+  const name = String(order.typename || '').toLowerCase()
+  if (name.includes('支付') && name.includes('宝')) return 'alipay'
+  if (name.includes('微信')) return 'wechatpay'
+  return 'wallet'
+}
+
+function payTextClass(order: Order) {
+  const name = String(order.typename || '').toLowerCase()
+  if (name.includes('支付') && name.includes('宝')) return 'text-blue-600'
+  if (name.includes('微信')) return 'text-green-600'
+  return 'text-gray-600'
+}
+
 async function fetchOrders() {
   loading.value = true
   try {
@@ -187,15 +203,18 @@ async function fetchOrders() {
 }
 
 async function handleOp(action: string, tradeNo: string) {
-  const actionText = { refund: '退款', freeze: '冻结', unfreeze: '解冻' }[action] || '操作'
-  try {
-    await ElMessageBox.confirm(`确定要${actionText}该订单吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-  } catch {
-    return
+  const actionText = { refund: '退款', freeze: '冻结', unfreeze: '解冻', refresh: '刷新状态' }[action] || '操作'
+  const needConfirm = action !== 'refresh'
+  if (needConfirm) {
+    try {
+      await ElMessageBox.confirm(`确定要${actionText}该订单吗？`, '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+    } catch {
+      return
+    }
   }
   try {
     const res = await orderOp({ action, trade_no: tradeNo })

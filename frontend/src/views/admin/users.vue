@@ -36,7 +36,7 @@
           加载中...
         </div>
 
-        <table v-else class="table table-fixed">
+        <table v-else class="table table-fixed whitespace-nowrap">
           <thead>
             <tr>
               <th class="pl-6 w-8">ID</th>
@@ -113,14 +113,14 @@
                     @click="resetKey(user.uid)">重置密钥</button>
                   <button class="text-emerald-600 hover:text-emerald-800 text-xs font-medium px-1"
                     @click="openMoneyDialog(user)">余额</button>
-                  <button v-if="user.status === 0" class="text-amber-600 hover:text-amber-800 text-xs font-medium px-1"
+                  <button v-if="user.status === 0" class="text-emerald-600 hover:text-emerald-800 text-xs font-medium px-1"
                     @click="setStatus(user.uid, 1)">
-                    禁用
+                    启用
                   </button>
                   <button v-else-if="user.status === 1"
-                    class="text-emerald-600 hover:text-emerald-800 text-xs font-medium px-1"
+                    class="text-amber-600 hover:text-amber-800 text-xs font-medium px-1"
                     @click="setStatus(user.uid, 0)">
-                    启用
+                    禁用
                   </button>
                   <button class="text-red-600 hover:text-red-800 text-xs font-medium px-1"
                     @click="deleteUser(user.uid)">删除</button>
@@ -314,7 +314,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, reactive, computed } from 'vue'
-import { getUserList, addUser, updateUser, userOp, getUserEdit } from '@/api/admin'
+import { getUserList, addUser, updateUser, userOp, getUserEdit, getGroupList } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 
@@ -376,9 +376,7 @@ const userForm = reactive({
   status: 1
 })
 
-const groups = ref<Group[]>([
-  { gid: 1, name: '默认组' }
-])
+const groups = ref<Group[]>([])
 
 const statusMap: Record<number, { text: string; class: string }> = {
   0: { text: '禁用', class: 'badge-danger' },
@@ -414,6 +412,28 @@ async function fetchUsers() {
   }
 }
 
+async function fetchGroups() {
+  try {
+    const res = await getGroupList({ page: 1, limit: 500 })
+    groups.value = (res.data || []).map((g: any) => ({
+      gid: Number(g.gid),
+      name: g.name
+    }))
+    if (groups.value.length === 0) {
+      groups.value = [{ gid: 1, name: '默认组' }]
+    }
+    if (!groups.value.some(g => Number(g.gid) === Number(userForm.gid))) {
+      userForm.gid = groups.value[0].gid
+    }
+  } catch (error: any) {
+    console.error('获取用户组失败:', error)
+    ElMessage.error(error?.message || '获取用户组失败')
+    if (groups.value.length === 0) {
+      groups.value = [{ gid: 1, name: '默认组' }]
+    }
+  }
+}
+
 function formatTime(time: string) {
   return dayjs(time).format('YYYY-MM-DD HH:mm')
 }
@@ -423,6 +443,9 @@ function openAddDialog() {
   dialogTitle.value = '添加商户'
   editingUser.value = null
   resetForm()
+  if (!groups.value.some(g => Number(g.gid) === Number(userForm.gid))) {
+    userForm.gid = groups.value[0]?.gid || 1
+  }
   dialogVisible.value = true
 }
 
@@ -434,19 +457,25 @@ async function openEditDialog(user: User) {
   try {
     const res = await getUserEdit(user.uid)
     if (res.code === 0) {
+      if (Array.isArray(res.groups) && res.groups.length > 0) {
+        groups.value = res.groups.map((g: any) => ({
+          gid: Number(g.gid),
+          name: g.name
+        }))
+      }
       const editUser = res.user
-      userForm.gid = editUser.gid
+      userForm.gid = editUser.gid ?? (groups.value[0]?.gid || 1)
       userForm.phone = editUser.phone || ''
       userForm.email = editUser.email || ''
       userForm.qq = editUser.qq || ''
       userForm.url = editUser.url || ''
-      userForm.settle_id = editUser.settle_id || 1
+      userForm.settle_id = editUser.settle_id ?? 1
       userForm.account = editUser.account || ''
       userForm.username = editUser.username || ''
-      userForm.mode = editUser.mode || 0
-      userForm.pay = editUser.pay || 1
-      userForm.settle = editUser.settle || 1
-      userForm.status = editUser.status || 1
+      userForm.mode = editUser.mode ?? 0
+      userForm.pay = editUser.pay ?? 1
+      userForm.settle = editUser.settle ?? 1
+      userForm.status = editUser.status ?? 1
       userForm.pwd = ''
     }
   } catch (error) {
@@ -592,6 +621,7 @@ async function submitMoneyOp() {
 
 onMounted(() => {
   fetchUsers()
+  fetchGroups()
 })
 </script>
 

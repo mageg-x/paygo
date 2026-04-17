@@ -59,6 +59,7 @@ const menus = [
   { path: '/user/settles', name: '结算管理', icon: Wallet },
   { path: '/user/records', name: '资金记录', icon: Receipt },
   { path: '/user/qrcode', name: '收款二维码', icon: QrCode },
+  { path: '/user/paytest', name: '接口测试', icon: CreditCard },
   { path: '/user/recharge', name: '余额充值', icon: CreditCard },
   { path: '/user/invite', name: '邀请推广', icon: Gift },
   { path: '/user/groupbuy', name: '会员购买', icon: CreditCardIcon },

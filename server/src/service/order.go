@@ -14,6 +14,7 @@ import (
 
 	"paygo/src/config"
 	"paygo/src/model"
+	"paygo/src/plugin"
 )
 
 type OrderService struct {
@@ -61,7 +62,7 @@ func (s *OrderService) CreateOrder(uid uint, outTradeNo, name, notifyURL, return
 		return nil, errors.New("商户不存在")
 	}
 
-	if user.Status != 0 {
+	if user.Status != 1 {
 		log.Printf("[create_order_failed] uid=%d, out_trade_no=%s, reason=merchant disabled, status=%d", uid, outTradeNo, user.Status)
 		return nil, errors.New("商户已被禁用")
 	}
@@ -524,6 +525,51 @@ func (s *OrderService) Refund(tradeNo string, money float64) error {
 	var user model.User
 	config.DB.First(&user, order.UID)
 
+	// 本地校验提前做，避免上游退款成功但本地记账失败
+	if order.Tid != 2 {
+		availableRefund := order.Getmoney - order.Refundmoney
+		if money > availableRefund {
+			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=refund exceeds available getmoney, available=%.2f", tradeNo, money, availableRefund)
+			return errors.New("退款金额超过可退金额")
+		}
+
+		if user.Money < money {
+			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=insufficient balance, balance=%.2f", tradeNo, money, user.Money)
+			return errors.New("商户余额不足")
+		}
+	}
+
+	// 先调用上游退款，只有上游成功才落本地账务
+	var channel model.Channel
+	if err := config.DB.First(&channel, order.Channel).Error; err != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=channel not found, channel_id=%d, error=%s", tradeNo, money, order.Channel, err.Error())
+		return errors.New("通道不存在")
+	}
+
+	pluginHandler := plugin.GetHandler(channel.Plugin)
+	if pluginHandler == nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=plugin not found, plugin=%s", tradeNo, money, channel.Plugin)
+		return errors.New("退款插件不存在")
+	}
+
+	refundResult, err := pluginHandler.Refund(map[string]interface{}{
+		"trade_no": tradeNo,
+		"money":    money,
+		"channel":  channel,
+	})
+	if err != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=plugin refund failed, plugin=%s, error=%s", tradeNo, money, channel.Plugin, err.Error())
+		return err
+	}
+	if refundResult.Code != 0 {
+		msg := strings.TrimSpace(refundResult.ErrMsg)
+		if msg == "" {
+			msg = "上游退款失败"
+		}
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=plugin refund rejected, plugin=%s, err_msg=%s", tradeNo, money, channel.Plugin, msg)
+		return errors.New(msg)
+	}
+
 	// 扣除商户余额（普通订单和充值订单处理不同）
 	oldMoney := user.Money
 	var newMoney float64
@@ -612,7 +658,10 @@ func (s *OrderService) Refund(tradeNo string, money float64) error {
 	}
 	tx.Create(refundOrder)
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=commit failed, error=%s", tradeNo, money, err.Error())
+		return errors.New("退款记账失败")
+	}
 
 	log.Printf("[refund_success] trade_no=%s, money=%.2f, refund_no=%s", tradeNo, money, refundNo)
 	return nil

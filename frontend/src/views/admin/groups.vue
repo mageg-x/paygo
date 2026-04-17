@@ -18,7 +18,7 @@
     <!-- 用户组列表 -->
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm whitespace-nowrap">
           <thead>
             <tr class="bg-gray-50 border-b border-gray-100">
               <th class="px-4 py-3 text-left font-semibold text-gray-600">ID</th>
@@ -104,7 +104,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">结算手续费率 (%)</label>
-                <input v-model="form.settle_rate" type="number" step="0.01"
+                <input v-model.number="form.settle_rate" type="number" step="0.01"
                   class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
@@ -193,7 +193,7 @@ const form = reactive({
   expire: 0,
   settle_open: 1,
   settle_type: 1,
-  settle_rate: '0',
+  settle_rate: 0,
   settings: '',
   config: ''
 })
@@ -242,7 +242,7 @@ function openAddDialog() {
   form.expire = 0
   form.settle_open = 1
   form.settle_type = 1
-  form.settle_rate = '0'
+  form.settle_rate = 0
   form.settings = ''
   form.config = ''
   dialogVisible.value = true
@@ -259,7 +259,7 @@ function openEditDialog(g: Group) {
   form.expire = g.expire || 0
   form.settle_open = g.settle_open || 0
   form.settle_type = g.settle_type || 1
-  form.settle_rate = g.settle_rate || '0'
+  form.settle_rate = Number(g.settle_rate || 0)
   form.settings = g.settings || ''
   form.config = g.config || ''
   dialogVisible.value = true

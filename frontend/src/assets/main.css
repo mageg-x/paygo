@@ -26,22 +26,29 @@ body {
   line-height: 1.6;
 }
 
-/* 1. 隐藏 Chrome/Edge/Safari 等 WebKit 内核浏览器的滚动条 */
+/* 自定义滚动条样式 - 4px 宽，蓝色渐变 */
 *::-webkit-scrollbar {
-  display: none !important;
-  /* 直接隐藏滚动条元素 */
-  width: 0 !important;
-  /* 兜底：宽度设为0 */
-  height: 0 !important;
-  /* 兜底：高度设为0 */
+  width: 4px;
+  height: 8px;
 }
 
-/* 2. 隐藏 Firefox 浏览器的滚动条（Firefox 专用属性） */
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3b82f6, #6366f1);
+  border-radius: 2px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #2563eb, #4f46e5);
+}
+
+/* Firefox 滚动条样式 */
 * {
-  scrollbar-width: none !important;
-  /* 隐藏滚动条，保留滚动功能 */
-  -ms-overflow-style: none !important;
-  /* 兼容 IE/Edge 旧版本 */
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 transparent;
 }
 
 /* 卡片样式 */

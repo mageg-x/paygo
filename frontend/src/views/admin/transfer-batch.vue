@@ -31,7 +31,7 @@
           <span class="text-sm text-gray-500">共 {{ fileData.length }} 条记录</span>
         </div>
         <div class="overflow-x-auto border border-gray-200 rounded-lg">
-          <table class="w-full text-sm">
+          <table class="w-full text-sm whitespace-nowrap">
             <thead>
               <tr class="bg-gray-50 border-b border-gray-200">
                 <th class="px-4 py-2 text-left font-semibold text-gray-600">序号</th>
@@ -76,7 +76,7 @@
         <h3 class="text-lg font-semibold text-gray-900">批量转账记录</h3>
       </div>
       <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm whitespace-nowrap">
           <thead>
             <tr class="bg-gray-50 border-b border-gray-100">
               <th class="px-4 py-3 text-left font-semibold text-gray-600">批次号</th>

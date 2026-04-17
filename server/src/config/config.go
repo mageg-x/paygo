@@ -111,21 +111,21 @@ func InitDB() {
 
 func loadAdminConfig() {
 	var cfg model.Config
-	
+
 	// 加载管理员用户名
 	cfg = model.Config{}
 	DB.Where("k = ?", "admin_user").Limit(1).Find(&cfg)
 	if cfg.V != "" {
 		AppConfig.AdminUser = cfg.V
 	}
-	
+
 	// 加载管理员密码
 	cfg = model.Config{}
 	DB.Where("k = ?", "admin_pwd").Limit(1).Find(&cfg)
 	if cfg.V != "" {
 		AppConfig.AdminPwd = cfg.V
 	}
-	
+
 	// 加载系统密钥
 	cfg = model.Config{}
 	DB.Where("k = ?", "sys_key").Limit(1).Find(&cfg)
@@ -171,12 +171,12 @@ func initDefaultConfig() {
 		v string
 	}{
 		// 网站信息
-		{"reg_open", "1"},          // 注册开放
-		{"reg_pay", "0"},           // 注册收费关闭
-		{"reg_pay_price", "0"},     // 注册费用
-		{"user_review", "0"},       // 注册无需审核
-		{"test_open", "0"},         // 测试支付关闭
-		{"test_pay_uid", "1000"},   // 测试支付收款商户
+		{"reg_open", "1"},        // 注册开放
+		{"reg_pay", "0"},         // 注册收费关闭
+		{"reg_pay_price", "0"},   // 注册费用
+		{"user_review", "0"},     // 注册无需审核
+		{"test_open", "0"},       // 测试支付关闭
+		{"test_pay_uid", "1000"}, // 测试支付收款商户
 		{"sitename", "PayGo支付"},
 		{"title", "PayGo支付"},
 		{"localurl", "http://127.0.0.1:8080/"},
@@ -184,11 +184,11 @@ func initDefaultConfig() {
 		{"site_keywords", ""},
 		{"site_description", ""},
 		{"cdn_url", ""},
-		{"user_verification", "0"},  // 用户验证方式: 0=无, 1=邮箱, 2=手机
+		{"user_verification", "0"}, // 用户验证方式: 0=无, 1=邮箱, 2=手机
 		{"kfqq", ""},
 		{"email", ""},
 		// 商户设置
-		{"default_group", "1"},  // 默认用户组ID
+		{"default_group", "1"}, // 默认用户组ID
 		// 支付设置
 		{"pay_min_money", "1"},
 		{"pay_max_money", "100000"},
@@ -249,6 +249,8 @@ func initDefaultConfig() {
 		{"cron_auto_settle_spec", "0 0 * * * ?"},
 		{"cron_retry_notify", "1"},
 		{"cron_retry_notify_spec", "0 */5 * * * ?"},
+		{"cron_order_query", "1"},
+		{"cron_order_query_spec", "0 */3 * * * ?"},
 		{"cron_risk_check", "1"},
 		{"cron_risk_check_spec", "0 */30 * * * ?"},
 		{"cron_cleanup", "1"},

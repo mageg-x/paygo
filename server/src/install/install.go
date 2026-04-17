@@ -124,8 +124,8 @@ func createDefaultPayTypes() {
 	config.DB.Model(&model.PayType{}).Count(&count)
 	if count == 0 {
 		types := []model.PayType{
-			{Name: "alipay", Device: 3, Showname: "支付宝", Status: 1},
-			{Name: "wechatpay", Device: 3, Showname: "微信支付", Status: 1},
+			{Name: "alipay", Showname: "支付宝", Status: 1},
+			{Name: "wechatpay", Showname: "微信支付", Status: 1},
 		}
 		for _, t := range types {
 			config.DB.Create(&t)

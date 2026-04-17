@@ -21,8 +21,14 @@ export function userRegister(data: {
   phone?: string
   password: string
   invite_code?: string
+  code?: string
 }): Promise<ApiResponse> {
   return request.post('/user/reg', data)
+}
+
+// 商户注册 - 发送验证码
+export function userRegisterSendCode(data: { email?: string; phone?: string }): Promise<ApiResponse> {
+  return request.post('/user/reg/send', data)
 }
 
 // 登出

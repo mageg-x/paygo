@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"paygo/src/config"
 	"paygo/src/model"
+	"paygo/src/plugin"
 )
 
 type TransferService struct {
@@ -22,6 +25,24 @@ func NewTransferService() *TransferService {
 
 // 创建转账
 func (s *TransferService) CreateTransfer(uid uint, transferType, account, username string, money float64, desc string) (*model.Transfer, error) {
+	if money <= 0 {
+		return nil, errors.New("转账金额必须大于0")
+	}
+
+	transferMin := config.Get("transfer_min")
+	if transferMin != "" {
+		if minVal, err := strconv.ParseFloat(transferMin, 64); err == nil && minVal > 0 && money < minVal {
+			return nil, fmt.Errorf("最低转账金额为%.2f", minVal)
+		}
+	}
+
+	transferMax := config.Get("transfer_max")
+	if transferMax != "" {
+		if maxVal, err := strconv.ParseFloat(transferMax, 64); err == nil && maxVal > 0 && money > maxVal {
+			return nil, fmt.Errorf("最高转账金额为%.2f", maxVal)
+		}
+	}
+
 	// 获取商户
 	user, err := s.authSvc.GetUser(uid)
 	if err != nil {
@@ -59,6 +80,12 @@ func (s *TransferService) CreateTransfer(uid uint, transferType, account, userna
 		return nil, errors.New("余额不足")
 	}
 
+	channel, err := s.selectTransferChannel(transferType)
+	if err != nil {
+		log.Printf("[create_transfer_failed] uid=%d, transfer_type=%s, money=%.2f, reason=%s", uid, transferType, money, err.Error())
+		return nil, err
+	}
+
 	// 生成转账单号
 	bizNo := fmt.Sprintf("T%s%d", time.Now().Format("20060102150405"), time.Now().UnixNano()%1000000)
 
@@ -78,7 +105,7 @@ func (s *TransferService) CreateTransfer(uid uint, transferType, account, userna
 		BizNo:     bizNo,
 		UID:       uid,
 		Type:      transferType,
-		Channel:   0, // TODO: 选择通道
+		Channel:   int(channel.ID),
 		Account:   account,
 		Username:  username,
 		Money:     money,
@@ -109,7 +136,8 @@ func (s *TransferService) CreateTransfer(uid uint, transferType, account, userna
 
 	tx.Commit()
 
-	// TODO: 异步执行转账
+	// 异步执行转账
+	go s.executeTransferAsync(transfer.BizNo)
 
 	return transfer, nil
 }
@@ -122,6 +150,16 @@ func (s *TransferService) QueryTransfer(bizNo string) (*model.Transfer, error) {
 		log.Printf("[query_transfer_failed] biz_no=%s, reason=transfer not found, error=%s", bizNo, result.Error.Error())
 		return nil, errors.New("转账记录不存在")
 	}
+
+	// 若仍处理中，尝试实时查询通道结果
+	if transfer.Status == 0 && transfer.Channel > 0 {
+		if err := s.refreshTransferStatus(&transfer); err != nil {
+			log.Printf("[query_transfer_status_refresh_failed] biz_no=%s, error=%s", bizNo, err.Error())
+		}
+		// 重新读取最新状态
+		config.DB.Where("biz_no = ?", bizNo).First(&transfer)
+	}
+
 	return &transfer, nil
 }
 
@@ -205,6 +243,201 @@ func (s *TransferService) RefundTransfer(bizNo string) error {
 	tx.Commit()
 
 	return nil
+}
+
+func (s *TransferService) selectTransferChannel(transferType string) (*model.Channel, error) {
+	var channels []model.Channel
+	if err := config.DB.Where("status = 1").Order("id ASC").Find(&channels).Error; err != nil {
+		return nil, errors.New("获取通道失败")
+	}
+
+	for _, ch := range channels {
+		handler := plugin.GetHandler(ch.Plugin)
+		if handler == nil {
+			continue
+		}
+		info := handler.GetInfo()
+		if supportsTransferType(info.Transtypes, transferType) {
+			return &ch, nil
+		}
+	}
+
+	return nil, errors.New("没有可用的转账通道")
+}
+
+func supportsTransferType(types []string, transferType string) bool {
+	transferType = strings.ToLower(strings.TrimSpace(transferType))
+	for _, t := range types {
+		tv := strings.ToLower(strings.TrimSpace(t))
+		if tv == transferType || tv == "all" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *TransferService) executeTransferAsync(bizNo string) {
+	var transfer model.Transfer
+	if err := config.DB.Where("biz_no = ?", bizNo).First(&transfer).Error; err != nil {
+		log.Printf("[execute_transfer_async_failed] biz_no=%s, reason=transfer not found, error=%s", bizNo, err.Error())
+		return
+	}
+	if transfer.Status != 0 {
+		return
+	}
+
+	var channel model.Channel
+	if err := config.DB.Where("id = ?", transfer.Channel).First(&channel).Error; err != nil {
+		s.failTransferAndRefund(&transfer, "转账通道不存在")
+		return
+	}
+
+	handler := plugin.GetHandler(channel.Plugin)
+	if handler == nil {
+		s.failTransferAndRefund(&transfer, "转账插件不存在")
+		return
+	}
+
+	result, err := handler.Transfer(map[string]interface{}{
+		"biz_no":   transfer.BizNo,
+		"account":  transfer.Account,
+		"username": transfer.Username,
+		"money":    transfer.Money,
+		"channel":  channel,
+	})
+	if err != nil {
+		s.failTransferAndRefund(&transfer, err.Error())
+		return
+	}
+	if result.Code != 0 {
+		msg := result.ErrMsg
+		if msg == "" {
+			msg = "转账失败"
+		}
+		s.failTransferAndRefund(&transfer, msg)
+		return
+	}
+
+	updates := map[string]interface{}{
+		"status":       1,
+		"result":       result.OrderID,
+		"pay_order_no": result.OrderID,
+		"paytime":      time.Now(),
+	}
+	if result.PayDate != "" {
+		if payTime, err := time.Parse("2006-01-02 15:04:05", result.PayDate); err == nil {
+			updates["paytime"] = payTime
+		}
+	}
+
+	if err := config.DB.Model(&model.Transfer{}).Where("biz_no = ? AND status = 0", transfer.BizNo).Updates(updates).Error; err != nil {
+		log.Printf("[execute_transfer_async_failed] biz_no=%s, reason=update success status failed, error=%s", bizNo, err.Error())
+		return
+	}
+
+	log.Printf("[execute_transfer_async_success] biz_no=%s, order_id=%s", bizNo, result.OrderID)
+}
+
+func (s *TransferService) refreshTransferStatus(transfer *model.Transfer) error {
+	var channel model.Channel
+	if err := config.DB.Where("id = ?", transfer.Channel).First(&channel).Error; err != nil {
+		return err
+	}
+
+	handler := plugin.GetHandler(channel.Plugin)
+	if handler == nil {
+		return errors.New("转账插件不存在")
+	}
+
+	queryResult, err := handler.TransferQuery(map[string]interface{}{
+		"biz_no":  transfer.BizNo,
+		"channel": channel,
+	})
+	if err != nil {
+		return err
+	}
+	if queryResult.Code != 0 {
+		return errors.New(queryResult.ErrMsg)
+	}
+
+	switch queryResult.Status {
+	case 1:
+		updates := map[string]interface{}{
+			"status":  1,
+			"paytime": time.Now(),
+		}
+		if queryResult.PayDate != "" {
+			if payTime, err := time.Parse("2006-01-02 15:04:05", queryResult.PayDate); err == nil {
+				updates["paytime"] = payTime
+			}
+		}
+		config.DB.Model(&model.Transfer{}).Where("biz_no = ? AND status = 0", transfer.BizNo).Updates(updates)
+	case 2:
+		msg := queryResult.ErrMsg
+		if msg == "" {
+			msg = "转账失败"
+		}
+		s.failTransferAndRefund(transfer, msg)
+	}
+
+	return nil
+}
+
+func (s *TransferService) failTransferAndRefund(transfer *model.Transfer, reason string) {
+	tx := config.DB.Begin()
+
+	updateRes := tx.Model(&model.Transfer{}).Where("biz_no = ? AND status = 0", transfer.BizNo).Updates(map[string]interface{}{
+		"status":  2,
+		"result":  reason,
+		"paytime": time.Now(),
+	})
+	if updateRes.Error != nil {
+		tx.Rollback()
+		log.Printf("[transfer_fail_refund_failed] biz_no=%s, reason=update transfer failed, error=%s", transfer.BizNo, updateRes.Error.Error())
+		return
+	}
+	if updateRes.RowsAffected == 0 {
+		tx.Rollback()
+		return
+	}
+
+	var user model.User
+	if err := tx.Where("uid = ?", transfer.UID).First(&user).Error; err != nil {
+		tx.Rollback()
+		log.Printf("[transfer_fail_refund_failed] biz_no=%s, reason=user not found, error=%s", transfer.BizNo, err.Error())
+		return
+	}
+
+	oldMoney := user.Money
+	newMoney := oldMoney + transfer.Money
+	if err := tx.Model(&user).Update("money", newMoney).Error; err != nil {
+		tx.Rollback()
+		log.Printf("[transfer_fail_refund_failed] biz_no=%s, reason=refund money failed, error=%s", transfer.BizNo, err.Error())
+		return
+	}
+
+	record := &model.Record{
+		UID:      transfer.UID,
+		Action:   10,
+		Money:    transfer.Money,
+		Oldmoney: oldMoney,
+		Newmoney: newMoney,
+		Type:     "transfer_fail_refund",
+		TradeNo:  transfer.BizNo,
+		Date:     time.Now(),
+	}
+	if err := tx.Create(record).Error; err != nil {
+		tx.Rollback()
+		log.Printf("[transfer_fail_refund_failed] biz_no=%s, reason=create record failed, error=%s", transfer.BizNo, err.Error())
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("[transfer_fail_refund_failed] biz_no=%s, reason=commit failed, error=%s", transfer.BizNo, err.Error())
+		return
+	}
+
+	log.Printf("[transfer_fail_refund_success] biz_no=%s, reason=%s", transfer.BizNo, reason)
 }
 
 // 获取转账记录详情
