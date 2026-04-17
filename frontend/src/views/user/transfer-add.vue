@@ -27,7 +27,7 @@
           <select v-model="form.targetGroup"
             class="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">选择目标用户组</option>
-            <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+            <option v-for="g in groups" :key="g.gid" :value="g.gid">{{ g.name }}</option>
           </select>
         </div>
 
@@ -55,7 +55,7 @@
         <div v-for="t in transfers" :key="t.id" class="p-4">
           <div class="flex items-center justify-between">
             <div>
-              <div class="text-sm font-medium text-gray-900">转让给 UID: {{ t.target_uid }}</div>
+              <div class="text-sm font-medium text-gray-900">转让给 UID: {{ t.to_uid }}</div>
               <div class="text-xs text-gray-500 mt-0.5">{{ t.created_at }}</div>
             </div>
             <div class="text-right">
@@ -131,7 +131,7 @@ async function handleTransfer() {
   try {
     const res = await createUserGroupTransfer({
       target_uid: form.value.targetUid,
-      group_id: form.value.targetGroup,
+      group_id: Number(form.value.targetGroup),
       price: form.value.price
     })
     if (res.code === 0) {

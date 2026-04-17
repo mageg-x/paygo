@@ -32,7 +32,7 @@
           <p class="text-sm text-gray-500 mt-1">{{ group.info || '暂无描述' }}</p>
           <div class="mt-4">
             <span class="text-3xl font-bold text-blue-600">¥{{ group.price }}</span>
-            <span class="text-gray-500 text-sm">/{{ group.expire === 0 ? '永久' : group.expire + '天' }}</span>
+            <span class="text-gray-500 text-sm">/{{ group.expire === 0 ? '永久' : group.expire + '个月' }}</span>
           </div>
           <div class="mt-4 space-y-2 text-sm">
             <div class="flex items-center justify-between">
@@ -41,7 +41,7 @@
             </div>
             <div class="flex items-center justify-between">
               <span class="text-gray-500">结算周期</span>
-              <span class="font-medium">{{ settleCycleName(group.settle_cycle) }}</span>
+              <span class="font-medium">{{ settleCycleName(group.settle_type) }}</span>
             </div>
             <div class="flex items-center justify-between">
               <span class="text-gray-500">自动结算</span>
@@ -67,7 +67,7 @@
       <h4 class="font-medium text-gray-800 mb-2">升级说明</h4>
       <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
         <li>升级后立即生效，有效期内可享受对应费率优惠</li>
-        <li>费用按剩余天数比例计算</li>
+        <li>费用按剩余月数比例计算</li>
         <li>如需取消升级，请联系客服</li>
       </ul>
     </div>
@@ -110,11 +110,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getUserInfo } from '@/api/user'
-import { useAppStore } from '@/stores/app'
+import { getUserInfo, getUserGroupList, buyUserGroup } from '@/api/user'
 import { ElMessage } from 'element-plus'
 
-const appStore = useAppStore()
 const currentGid = ref(0)
 const currentGroup = ref<any>(null)
 const selectedGroup = ref<any>(null)
@@ -136,9 +134,16 @@ function selectGroup(group: any) {
 
 async function handleBuy() {
   if (!selectedGroup.value) return
-  // TODO: 实现购买逻辑
-  ElMessage.info('支付功能开发中')
-  selectedGroup.value = null
+  try {
+    const res = await buyUserGroup({ group_id: selectedGroup.value.gid })
+    if (res.code === 0) {
+      ElMessage.success(res.msg || '购买成功')
+      selectedGroup.value = null
+      await fetchData()
+    }
+  } catch (error) {
+    console.error('购买失败:', error)
+  }
 }
 
 async function fetchData() {
@@ -148,13 +153,10 @@ async function fetchData() {
       currentGid.value = infoRes.data.gid || 0
     }
 
-    // TODO: 获取用户组列表 API
-    // 暂时使用模拟数据
-    groups.value = [
-      { gid: 1, name: '基础版', info: '适合个人开发者', price: 99, expire: 30, settle_rate: '2.0', settle_cycle: 1, settle_open: 1 },
-      { gid: 2, name: '标准版', info: '适合小微商户', price: 299, expire: 30, settle_rate: '1.5', settle_cycle: 1, settle_open: 1 },
-      { gid: 3, name: '专业版', info: '适合企业用户', price: 699, expire: 30, settle_rate: '1.0', settle_cycle: 0, settle_open: 1 }
-    ]
+    const groupRes = await getUserGroupList()
+    if (groupRes.code === 0) {
+      groups.value = (groupRes.data || []).filter((g: any) => g.isbuy === 1)
+    }
 
     currentGroup.value = groups.value.find(g => g.gid === currentGid.value) || null
   } catch (error) {

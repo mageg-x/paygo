@@ -260,6 +260,28 @@ export function profitReceiverOp(data: { action: string; id?: number; uid?: numb
   return request.post('/admin/profit/receiver/op', data)
 }
 
+// 数据清理统计
+export function getCleanStats(params: { order_timeout: string; max_retry: string; log_days: string }): Promise<ApiResponse> {
+  return request.get('/admin/clean/stats', { params })
+}
+
+// 执行数据清理
+export function runClean(data: { action: 'orders' | 'failed_notifies' | 'logs' | 'cache'; order_timeout?: number; max_retry?: number; log_days?: number }): Promise<ApiResponse<{ count: number }>> {
+  return request.post('/admin/clean/run', data)
+}
+
+// 导出订单数据
+export function exportOrders(params: {
+  start_date: string
+  end_date: string
+  uid?: string
+  status?: string
+  type?: string
+  limit?: number
+}): Promise<ApiResponse> {
+  return request.get('/admin/export/orders', { params })
+}
+
 // 执行分账
 export function profitDo(data: { ps_no: string }): Promise<ApiResponse> {
   return request.post('/admin/profit/do', data)

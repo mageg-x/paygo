@@ -468,11 +468,30 @@ func (s *OrderService) notifyMerchant(order model.Order) {
 	}
 }
 
+// 手动重试回调通知
+func (s *OrderService) RetryNotify(tradeNo string) error {
+	order, err := s.GetOrder(tradeNo)
+	if err != nil {
+		return err
+	}
+	if order.Status != model.OrderStatusPaid && order.Status != model.OrderStatusRefunded {
+		return errors.New("订单状态不支持通知")
+	}
+
+	config.DB.Model(&model.Order{}).Where("trade_no = ?", tradeNo).Updates(map[string]interface{}{
+		"notify":     0,
+		"notifytime": time.Now(),
+	})
+
+	go s.notifyMerchant(*order)
+	return nil
+}
+
 // 标记通知成功
 func (s *OrderService) markNotifySuccess(tradeNo string) {
 	config.DB.Model(&model.Order{}).Where("trade_no = ?", tradeNo).Updates(map[string]interface{}{
-		"notify":      1,
-		"notifytime":  time.Now(),
+		"notify":     1,
+		"notifytime": time.Now(),
 	})
 }
 

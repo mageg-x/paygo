@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">数据导出</h1>
-        <p class="text-sm text-gray-500 mt-1">导出订单数据为Excel文件</p>
+        <p class="text-sm text-gray-500 mt-1">导出订单数据为CSV文件</p>
       </div>
     </div>
 
@@ -56,9 +56,9 @@
         <button @click="handleExport"
           class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2">
           <Download class="w-4 h-4" />
-          导出Excel
+          导出CSV
         </button>
-        <span class="text-sm text-gray-500">导出文件格式为 .xlsx，每次最多导出10万条记录</span>
+        <span class="text-sm text-gray-500">导出文件格式为 .csv，每次最多导出10万条记录</span>
       </div>
     </div>
 
@@ -103,7 +103,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { getOrderList } from '@/api/admin'
+import { exportOrders } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import { Download } from 'lucide-vue-next'
 
@@ -122,26 +122,37 @@ async function handleExport() {
     ElMessage.warning('请选择日期范围')
     return
   }
+  if (form.value.start_date > form.value.end_date) {
+    ElMessage.warning('开始日期不能晚于结束日期')
+    return
+  }
 
   try {
-    // TODO: 调用后端导出API
-    // 后端应返回文件流或下载链接
     ElMessage.info('正在生成导出文件，请稍候...')
 
-    // 模拟：获取数据并生成CSV
-    const res = await getOrderList({ page: 1, limit: 1000 })
+    const res = await exportOrders({
+      start_date: form.value.start_date,
+      end_date: form.value.end_date,
+      uid: form.value.uid || undefined,
+      status: form.value.status || undefined,
+      type: form.value.type || undefined,
+      limit: 100000
+    })
+
     if (res.code === 0) {
       const data = res.data || []
       const csv = generateCSV(data)
-      downloadCSV(csv, `订单导出_${form.value.start_date}_${form.value.end_date}.csv`)
+      const filename = `订单导出_${form.value.start_date}_${form.value.end_date}.csv`
+      downloadCSV(csv, filename)
       ElMessage.success('导出成功')
 
       // 添加到记录
       records.value.unshift({
         id: Date.now(),
-        filename: `订单导出_${form.value.start_date}_${form.value.end_date}.csv`,
+        filename,
         count: data.length,
-        time: new Date().toLocaleString('zh-CN')
+        time: new Date().toLocaleString('zh-CN'),
+        content: csv
       })
     }
   } catch (error) {
@@ -168,7 +179,12 @@ function generateCSV(data: any[]) {
     o.ip || ''
   ])
 
-  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+  const escapeCell = (value: unknown) => {
+    const text = String(value ?? '')
+    return `"${text.replace(/"/g, '""')}"`
+  }
+
+  return [headers.map(escapeCell).join(','), ...rows.map(r => r.map(escapeCell).join(','))].join('\n')
 }
 
 function downloadCSV(content: string, filename: string) {
@@ -182,7 +198,11 @@ function downloadCSV(content: string, filename: string) {
 }
 
 function downloadFile(record: any) {
-  ElMessage.info('下载功能开发中')
+  if (!record?.content) {
+    ElMessage.warning('该记录无可下载内容')
+    return
+  }
+  downloadCSV(record.content, record.filename)
 }
 
 function typeName(type: number) {

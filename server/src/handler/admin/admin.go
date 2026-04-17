@@ -17,6 +17,7 @@ import (
 	"paygo/src/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // 管理员Handler
@@ -231,75 +232,75 @@ func (h *AdminHandler) Settings(c *gin.Context) {
 // 保存设置
 func (h *AdminHandler) SaveSettings(c *gin.Context) {
 	var req struct {
-		Mod    string `json:"mod"`
-		OldPwd string `json:"old_pwd"`
-		NewPwd string `json:"new_pwd"`
+		Mod        string `json:"mod"`
+		OldPwd     string `json:"old_pwd"`
+		NewPwd     string `json:"new_pwd"`
 		ConfirmPwd string `json:"confirm_pwd"`
 		// 网站设置
-		Sitename string `json:"sitename"`
-		Title string `json:"title"`
-		Localurl string `json:"localurl"`
-		Apiurl string `json:"apiurl"`
-		Email string `json:"email"`
-		Kfqq string `json:"kfqq"`
-		RegOpen string `json:"reg_open"`
-		SiteKeywords string `json:"site_keywords"`
-		SiteDescription string `json:"site_description"`
-		CdnUrl string `json:"cdn_url"`
+		Sitename         string `json:"sitename"`
+		Title            string `json:"title"`
+		Localurl         string `json:"localurl"`
+		Apiurl           string `json:"apiurl"`
+		Email            string `json:"email"`
+		Kfqq             string `json:"kfqq"`
+		RegOpen          string `json:"reg_open"`
+		SiteKeywords     string `json:"site_keywords"`
+		SiteDescription  string `json:"site_description"`
+		CdnUrl           string `json:"cdn_url"`
 		UserVerification string `json:"user_verification"`
 		// 支付设置
-		TestOpen string `json:"test_open"`
+		TestOpen       string `json:"test_open"`
 		PaySuccessPage string `json:"pay_success_page"`
-		PayErrorPage string `json:"pay_error_page"`
-		PayMinMoney string `json:"pay_min_money"`
-		PayMaxMoney string `json:"pay_max_money"`
-		PayBlockGoods string `json:"pay_block_goods"`
-		PayFeeRate string `json:"pay_fee_rate"`
+		PayErrorPage   string `json:"pay_error_page"`
+		PayMinMoney    string `json:"pay_min_money"`
+		PayMaxMoney    string `json:"pay_max_money"`
+		PayBlockGoods  string `json:"pay_block_goods"`
+		PayFeeRate     string `json:"pay_fee_rate"`
 		InviteCashback string `json:"invite_cashback"`
-		QrcodeEnabled string `json:"qrcode_enabled"`
+		QrcodeEnabled  string `json:"qrcode_enabled"`
 		// 结算设置
-		SettleMoney string `json:"settle_money"`
-		SettleCycle string `json:"settle_cycle"`
-		SettleAlipay string `json:"settle_alipay"`
-		SettleWxpay string `json:"settle_wxpay"`
+		SettleMoney        string `json:"settle_money"`
+		SettleCycle        string `json:"settle_cycle"`
+		SettleAlipay       string `json:"settle_alipay"`
+		SettleWxpay        string `json:"settle_wxpay"`
 		SettleAutoTransfer string `json:"settle_auto_transfer"`
 		// 转账设置
-		TransferMin string `json:"transfer_min"`
-		TransferMax string `json:"transfer_max"`
-		TransferFee string `json:"transfer_fee"`
-		TransferAlipay string `json:"transfer_alipay"`
-		TransferWxpay string `json:"transfer_wxpay"`
+		TransferMin      string `json:"transfer_min"`
+		TransferMax      string `json:"transfer_max"`
+		TransferFee      string `json:"transfer_fee"`
+		TransferAlipay   string `json:"transfer_alipay"`
+		TransferWxpay    string `json:"transfer_wxpay"`
 		TransferShowName string `json:"transfer_show_name"`
 		// 快捷登录
 		LoginAlipay string `json:"login_alipay"`
-		LoginQq string `json:"login_qq"`
-		LoginWx string `json:"login_wx"`
+		LoginQq     string `json:"login_qq"`
+		LoginWx     string `json:"login_wx"`
 		// 通知设置
 		NotifyEmail string `json:"notify_email"`
 		EmailNotify string `json:"email_notify"`
 		OrderNotify string `json:"order_notify"`
 		// 实名认证
 		CertificateRequired string `json:"certificate_required"`
-		CertificateTypes string `json:"certificate_types"`
+		CertificateTypes    string `json:"certificate_types"`
 		// IP类型
 		IpType string `json:"ip_type"`
 		// 代理设置
 		ProxyEnabled string `json:"proxy_enabled"`
-		ProxyHost string `json:"proxy_host"`
-		ProxyPort string `json:"proxy_port"`
-		ProxyUser string `json:"proxy_user"`
-		ProxyPass string `json:"proxy_pass"`
+		ProxyHost    string `json:"proxy_host"`
+		ProxyPort    string `json:"proxy_port"`
+		ProxyUser    string `json:"proxy_user"`
+		ProxyPass    string `json:"proxy_pass"`
 		// 邮件设置
 		MailSmtpHost string `json:"mail_smtp_host"`
 		MailSmtpPort string `json:"mail_smtp_port"`
 		MailUsername string `json:"mail_username"`
 		MailPassword string `json:"mail_password"`
-		MailFrom string `json:"mail_from"`
+		MailFrom     string `json:"mail_from"`
 		// 短信设置
-		SmsEnabled string `json:"sms_enabled"`
+		SmsEnabled  string `json:"sms_enabled"`
 		SmsProvider string `json:"sms_provider"`
-		SmsAppid string `json:"sms_appid"`
-		SmsAppkey string `json:"sms_appkey"`
+		SmsAppid    string `json:"sms_appid"`
+		SmsAppkey   string `json:"sms_appkey"`
 		// 公告
 		GonggaoContent string `json:"gonggao_content"`
 	}
@@ -546,46 +547,46 @@ func (h *AdminHandler) AjaxChannelList(c *gin.Context) {
 
 	// 构建响应数据
 	type ChannelResponse struct {
-		ID              uint    `json:"id"`
-		Mode            int     `json:"mode"`
-		Type            int     `json:"type"`
-		Plugin          string  `json:"plugin"`
-		Name            string  `json:"name"`
-		Rate            float64 `json:"rate"`
-		Status          int     `json:"status"`
-		Apptype         string  `json:"apptype"`
-		ApptypeNames    string  `json:"apptype_names"` // 支付方式名称列表
-		Daytop          int     `json:"daytop"`
-		Daystatus       int     `json:"daystatus"`
-		Paymin          string  `json:"paymin"`
-		Paymax          string  `json:"paymax"`
-		Appwxmp         int     `json:"appwxmp"`
-		Appwxa          int     `json:"appwxa"`
-		Costrate        float64 `json:"costrate"`
-		Config          string  `json:"config"`
-		PluginShowname  string  `json:"plugin_showname"`
-		PluginSelect    map[string]string `json:"plugin_select"` // 插件支持的支付方式
+		ID             uint              `json:"id"`
+		Mode           int               `json:"mode"`
+		Type           int               `json:"type"`
+		Plugin         string            `json:"plugin"`
+		Name           string            `json:"name"`
+		Rate           float64           `json:"rate"`
+		Status         int               `json:"status"`
+		Apptype        string            `json:"apptype"`
+		ApptypeNames   string            `json:"apptype_names"` // 支付方式名称列表
+		Daytop         int               `json:"daytop"`
+		Daystatus      int               `json:"daystatus"`
+		Paymin         string            `json:"paymin"`
+		Paymax         string            `json:"paymax"`
+		Appwxmp        int               `json:"appwxmp"`
+		Appwxa         int               `json:"appwxa"`
+		Costrate       float64           `json:"costrate"`
+		Config         string            `json:"config"`
+		PluginShowname string            `json:"plugin_showname"`
+		PluginSelect   map[string]string `json:"plugin_select"` // 插件支持的支付方式
 	}
 
 	result := make([]ChannelResponse, len(channels))
 	for i, ch := range channels {
 		result[i] = ChannelResponse{
-			ID:       ch.ID,
-			Mode:     ch.Mode,
-			Type:     ch.Type,
-			Plugin:   ch.Plugin,
-			Name:     ch.Name,
-			Rate:     ch.Rate,
-			Status:   ch.Status,
-			Apptype:  ch.Apptype,
-			Daytop:   ch.Daytop,
+			ID:        ch.ID,
+			Mode:      ch.Mode,
+			Type:      ch.Type,
+			Plugin:    ch.Plugin,
+			Name:      ch.Name,
+			Rate:      ch.Rate,
+			Status:    ch.Status,
+			Apptype:   ch.Apptype,
+			Daytop:    ch.Daytop,
 			Daystatus: ch.Daystatus,
-			Paymin:   ch.Paymin,
-			Paymax:   ch.Paymax,
-			Appwxmp:  ch.Appwxmp,
-			Appwxa:   ch.Appwxa,
-			Costrate: ch.Costrate,
-			Config:   ch.Config,
+			Paymin:    ch.Paymin,
+			Paymax:    ch.Paymax,
+			Appwxmp:   ch.Appwxmp,
+			Appwxa:    ch.Appwxa,
+			Costrate:  ch.Costrate,
+			Config:    ch.Config,
 		}
 
 		// 获取插件信息和支付方式名称
@@ -768,7 +769,7 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 	result := make([]PluginResponse, 0, len(builtInPlugins))
 	for _, p := range builtInPlugins {
 		dbPlugin, exists := dbPluginMap[p.Name]
-		status := 1  // 默认启用
+		status := 1 // 默认启用
 		cfg := "{}"
 		if exists {
 			status = dbPlugin.Status
@@ -862,10 +863,10 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 					"name":       req.Name,
 					"showname":   info.Showname,
 					"author":     info.Author,
-					"types":     strings.Join(info.Types, ","),
+					"types":      strings.Join(info.Types, ","),
 					"transtypes": strings.Join(info.Transtypes, ","),
 					"inputs":     info.Inputs,
-					"config":    "{}",
+					"config":     "{}",
 				},
 			})
 			return
@@ -1028,19 +1029,53 @@ func (h *AdminHandler) PluginList(c *gin.Context) {
 
 // AJAX: 获取订单列表
 func (h *AdminHandler) AjaxOrderList(c *gin.Context) {
-	page, _ := strconv.Atoi(c.PostForm("page"))
-	pageSize, _ := strconv.Atoi(c.PostForm("limit"))
-	status := c.PostForm("status")
+	page := adminIntParam(c, "page", 1)
+	pageSize := adminIntParam(c, "limit", 20)
+	status := adminStringParam(c, "status")
+	uid := adminIntParam(c, "uid", 0)
+	payType := adminIntParam(c, "type", 0)
+	tradeNo := adminStringParam(c, "trade_no")
+	startDate := adminStringParam(c, "start_date")
+	endDate := adminStringParam(c, "end_date")
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 1000 {
+		pageSize = 1000
+	}
 
 	query := config.DB.Model(&model.Order{})
 	if status != "" && status != "-1" {
 		query = query.Where("status = ?", status)
 	}
+	if uid > 0 {
+		query = query.Where("uid = ?", uid)
+	}
+	if payType > 0 {
+		query = query.Where("type = ?", payType)
+	}
+	if tradeNo != "" {
+		query = query.Where("(trade_no LIKE ? OR out_trade_no LIKE ?)", "%"+tradeNo+"%", "%"+tradeNo+"%")
+	}
+	if startDate != "" {
+		if t, err := time.Parse("2006-01-02", startDate); err == nil {
+			query = query.Where("addtime >= ?", t)
+		}
+	}
+	if endDate != "" {
+		if t, err := time.Parse("2006-01-02", endDate); err == nil {
+			query = query.Where("addtime < ?", t.AddDate(0, 0, 1))
+		}
+	}
 
 	var orders []model.Order
 	var total int64
 	query.Count(&total)
-	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&orders)
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("addtime DESC").Find(&orders)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":  0,
@@ -1065,13 +1100,29 @@ func (h *AdminHandler) AjaxOrderOp(c *gin.Context) {
 	var err error
 	switch req.Action {
 	case "refund":
+		if req.Money <= 0 {
+			order, e := h.orderSvc.GetOrder(req.TradeNo)
+			if e != nil {
+				err = e
+				break
+			}
+			available := order.Getmoney - order.Refundmoney
+			if order.Tid == 2 {
+				available = order.Money - order.Refundmoney
+			}
+			if available <= 0 {
+				err = fmt.Errorf("可退款金额为0")
+				break
+			}
+			req.Money = available
+		}
 		err = h.orderSvc.Refund(req.TradeNo, req.Money)
 	case "freeze":
 		err = h.orderSvc.Freeze(req.TradeNo)
 	case "unfreeze":
 		err = h.orderSvc.Unfreeze(req.TradeNo)
 	case "notify":
-		err = nil
+		err = h.orderSvc.RetryNotify(req.TradeNo)
 	}
 
 	if err != nil {
@@ -1108,11 +1159,11 @@ func (h *AdminHandler) AjaxUserList(c *gin.Context) {
 // AJAX: 商户操作
 func (h *AdminHandler) AjaxUserOp(c *gin.Context) {
 	var req struct {
-		Action string `json:"action"`
-		UID    uint   `json:"uid"`
-		Status int    `json:"status"`
+		Action string  `json:"action"`
+		UID    uint    `json:"uid"`
+		Status int     `json:"status"`
 		Money  float64 `json:"money"`
-		Type   string `json:"type"`
+		Type   string  `json:"type"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
@@ -1160,19 +1211,19 @@ func (h *AdminHandler) AjaxUserOp(c *gin.Context) {
 // 添加商户
 func (h *AdminHandler) AddUser(c *gin.Context) {
 	var req struct {
-		GID      int     `json:"gid"`
-		Phone    string  `json:"phone"`
-		Email    string  `json:"email"`
-		Pwd      string  `json:"pwd"`
-		QQ       string  `json:"qq"`
-		URL      string  `json:"url"`
-		SettleID int     `json:"settle_id"`
-		Account  string  `json:"account"`
-		Username string  `json:"username"`
-		Mode     int      `json:"mode"`
-		Pay      int      `json:"pay"`
-		Settle   int      `json:"settle"`
-		Status   int      `json:"status"`
+		GID      int    `json:"gid"`
+		Phone    string `json:"phone"`
+		Email    string `json:"email"`
+		Pwd      string `json:"pwd"`
+		QQ       string `json:"qq"`
+		URL      string `json:"url"`
+		SettleID int    `json:"settle_id"`
+		Account  string `json:"account"`
+		Username string `json:"username"`
+		Mode     int    `json:"mode"`
+		Pay      int    `json:"pay"`
+		Settle   int    `json:"settle"`
+		Status   int    `json:"status"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1273,7 +1324,7 @@ func (h *AdminHandler) EditUserPage(c *gin.Context) {
 	config.DB.Find(&groups)
 
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
+		"code":   0,
 		"user":   user,
 		"groups": groups,
 	})
@@ -1902,12 +1953,12 @@ func (h *AdminHandler) AjaxPayTypeList(c *gin.Context) {
 // AJAX: 支付类型操作
 func (h *AdminHandler) AjaxPayTypeOp(c *gin.Context) {
 	var req struct {
-		Action    string `json:"action"` // add, edit, delete
-		ID        uint   `json:"id"`
-		Name      string `json:"name"`
-		Device    int    `json:"device"`
-		Showname  string `json:"showname"`
-		Status    int    `json:"status"`
+		Action   string `json:"action"` // add, edit, delete
+		ID       uint   `json:"id"`
+		Name     string `json:"name"`
+		Device   int    `json:"device"`
+		Showname string `json:"showname"`
+		Status   int    `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Printf("[paytype_op_params_error] err=%s", err.Error())
@@ -2133,7 +2184,8 @@ func (h *AdminHandler) AjaxProfitReceiverOp(c *gin.Context) {
 // AJAX: 执行分账
 func (h *AdminHandler) AjaxProfitDo(c *gin.Context) {
 	var req struct {
-		PsNo string `json:"ps_no" binding:"required"`
+		PsNo    string `json:"ps_no"`
+		TradeNo string `json:"trade_no"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Printf("[profit_do_params_error] err=%s", err.Error())
@@ -2141,27 +2193,60 @@ func (h *AdminHandler) AjaxProfitDo(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[profit_do] ps_no=%s", req.PsNo)
-	// TODO: 调用分账服务执行实际分账
-	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "分账请求已提交"})
+	tradeNo := strings.TrimSpace(req.PsNo)
+	if tradeNo == "" {
+		tradeNo = strings.TrimSpace(req.TradeNo)
+	}
+	if tradeNo == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "缺少订单号"})
+		return
+	}
+
+	log.Printf("[profit_do] trade_no=%s", tradeNo)
+	profitSvc := service.NewProfitService()
+	if err := profitSvc.ProcessProfitSharing(tradeNo); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "分账执行完成"})
 }
 
 // AJAX: 批量转账记录列表
 func (h *AdminHandler) AjaxTransferBatchList(c *gin.Context) {
 	var batches []model.Batch
-	if err := config.DB.Order("id DESC").Find(&batches).Error; err != nil {
+	if err := config.DB.Order("time DESC").Find(&batches).Error; err != nil {
 		log.Printf("[获取批量转账记录列表失败] error=%s", err.Error())
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "获取列表失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": batches})
+
+	list := make([]gin.H, 0, len(batches))
+	for _, b := range batches {
+		var successCount int64
+		var failedCount int64
+		config.DB.Model(&model.Transfer{}).Where("pay_order_no = ? AND status = 1", b.Batch).Count(&successCount)
+		config.DB.Model(&model.Transfer{}).Where("pay_order_no = ? AND status = 2", b.Batch).Count(&failedCount)
+
+		list = append(list, gin.H{
+			"batch_no":   b.Batch,
+			"filename":   "-",
+			"total":      b.Count,
+			"success":    successCount,
+			"failed":     failedCount,
+			"amount":     b.Allmoney,
+			"status":     b.Status,
+			"created_at": b.Time.Format("2006-01-02 15:04:05"),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": list})
 }
 
 // AJAX: 创建批量转账
 func (h *AdminHandler) AjaxTransferBatchCreate(c *gin.Context) {
 	var req struct {
 		Filename string `json:"filename"`
-		Data    string `json:"data"`
+		Data     string `json:"data"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Printf("[transfer_batch_create_params_error] err=%s", err.Error())
@@ -2170,8 +2255,91 @@ func (h *AdminHandler) AjaxTransferBatchCreate(c *gin.Context) {
 	}
 
 	log.Printf("[transfer_batch_create] filename=%s, data_len=%d", req.Filename, len(req.Data))
-	// TODO: 解析数据并创建批量转账任务
-	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "批量转账任务已创建"})
+	var rows []struct {
+		UID     uint    `json:"uid"`
+		Name    string  `json:"name"`
+		Account string  `json:"account"`
+		Amount  float64 `json:"amount"`
+		Remark  string  `json:"remark"`
+	}
+	if err := json.Unmarshal([]byte(req.Data), &rows); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "批量数据格式错误"})
+		return
+	}
+	if len(rows) == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "批量数据不能为空"})
+		return
+	}
+
+	batchNo := fmt.Sprintf("B%s%03d", time.Now().Format("20060102150405"), time.Now().UnixNano()%1000)
+	now := time.Now()
+
+	tx := config.DB.Begin()
+	var totalAmount float64
+	validCount := 0
+
+	for i, row := range rows {
+		if row.UID == 0 || row.Account == "" || row.Amount <= 0 {
+			continue
+		}
+		transfer := model.Transfer{
+			BizNo:      fmt.Sprintf("%s%04d", batchNo, i+1),
+			PayOrderNo: batchNo,
+			UID:        row.UID,
+			Type:       "batch",
+			Channel:    0,
+			Account:    row.Account,
+			Username:   row.Name,
+			Money:      row.Amount,
+			Costmoney:  0,
+			Paytime:    now,
+			Status:     0,
+			API:        0,
+			Desc:       row.Remark,
+			Result:     req.Filename,
+		}
+		if err := tx.Create(&transfer).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "创建转账任务失败"})
+			return
+		}
+		totalAmount += row.Amount
+		validCount++
+	}
+
+	if validCount == 0 {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "没有有效的转账记录"})
+		return
+	}
+
+	batch := model.Batch{
+		Batch:    batchNo,
+		Allmoney: totalAmount,
+		Count:    validCount,
+		Time:     now,
+		Status:   0,
+	}
+	if err := tx.Create(&batch).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "创建批次失败"})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "创建批次失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "批量转账任务已创建",
+		"data": gin.H{
+			"batch_no": batchNo,
+			"total":    validCount,
+			"amount":   totalAmount,
+		},
+	})
 }
 
 // 上传证书文件
@@ -2248,4 +2416,197 @@ func (h *AdminHandler) FormatJson(c *gin.Context) {
 
 	formatted, _ := json.MarshalIndent(data, "", "  ")
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": string(formatted)})
+}
+
+// AJAX: 数据清理统计
+func (h *AdminHandler) AjaxCleanStats(c *gin.Context) {
+	orderTimeout := adminIntParam(c, "order_timeout", 24)
+	maxRetry := adminIntParam(c, "max_retry", 10)
+	logDays := adminIntParam(c, "log_days", 30)
+
+	if orderTimeout <= 0 {
+		orderTimeout = 24
+	}
+	if maxRetry <= 0 {
+		maxRetry = 10
+	}
+	if logDays <= 0 {
+		logDays = 30
+	}
+
+	orderDeadline := time.Now().Add(-time.Duration(orderTimeout) * time.Hour)
+	notifyDeadline := time.Now().Add(-time.Duration(maxRetry) * 5 * time.Minute)
+	logDeadline := time.Now().AddDate(0, 0, -logDays)
+
+	var orderCount int64
+	var failedNotifyCount int64
+	var logCount int64
+	var cacheBytes int64
+
+	config.DB.Model(&model.Order{}).
+		Where("status = ? AND addtime < ?", model.OrderStatusPending, orderDeadline).
+		Count(&orderCount)
+	config.DB.Model(&model.Order{}).
+		Where("status = ? AND notify = ? AND notifytime < ?", model.OrderStatusPaid, 2, notifyDeadline).
+		Count(&failedNotifyCount)
+	config.DB.Model(&model.Log{}).Where("date < ?", logDeadline).Count(&logCount)
+	config.DB.Model(&model.Cache{}).Select("COALESCE(SUM(LENGTH(v)),0)").Scan(&cacheBytes)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"order_count":         orderCount,
+			"failed_notify_count": failedNotifyCount,
+			"log_count":           logCount,
+			"cache_size_bytes":    cacheBytes,
+			"cache_size":          formatBytes(cacheBytes),
+		},
+	})
+}
+
+// AJAX: 执行数据清理
+func (h *AdminHandler) AjaxCleanRun(c *gin.Context) {
+	var req struct {
+		Action       string `json:"action" binding:"required"`
+		OrderTimeout int    `json:"order_timeout"`
+		MaxRetry     int    `json:"max_retry"`
+		LogDays      int    `json:"log_days"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	var affected int64
+	switch req.Action {
+	case "orders":
+		if req.OrderTimeout <= 0 {
+			req.OrderTimeout = 24
+		}
+		deadline := time.Now().Add(-time.Duration(req.OrderTimeout) * time.Hour)
+		result := config.DB.Where("status = ? AND addtime < ?", model.OrderStatusPending, deadline).Delete(&model.Order{})
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "清理失败"})
+			return
+		}
+		affected = result.RowsAffected
+	case "failed_notifies":
+		if req.MaxRetry <= 0 {
+			req.MaxRetry = 10
+		}
+		deadline := time.Now().Add(-time.Duration(req.MaxRetry) * 5 * time.Minute)
+		result := config.DB.Model(&model.Order{}).
+			Where("status = ? AND notify = ? AND notifytime < ?", model.OrderStatusPaid, 2, deadline).
+			Update("notify", 0)
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "清理失败"})
+			return
+		}
+		affected = result.RowsAffected
+	case "logs":
+		if req.LogDays <= 0 {
+			req.LogDays = 30
+		}
+		deadline := time.Now().AddDate(0, 0, -req.LogDays)
+		result := config.DB.Where("date < ?", deadline).Delete(&model.Log{})
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "清理失败"})
+			return
+		}
+		affected = result.RowsAffected
+	case "cache":
+		result := config.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.Cache{})
+		if result.Error != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "清理失败"})
+			return
+		}
+		affected = result.RowsAffected
+	default:
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "清理完成", "data": gin.H{"count": affected}})
+}
+
+// AJAX: 导出订单数据
+func (h *AdminHandler) AjaxExportOrders(c *gin.Context) {
+	limit := adminIntParam(c, "limit", 100000)
+	if limit <= 0 {
+		limit = 100000
+	}
+	if limit > 100000 {
+		limit = 100000
+	}
+
+	status := adminStringParam(c, "status")
+	uid := adminIntParam(c, "uid", 0)
+	payType := adminIntParam(c, "type", 0)
+	startDate := adminStringParam(c, "start_date")
+	endDate := adminStringParam(c, "end_date")
+
+	query := config.DB.Model(&model.Order{})
+	if status != "" && status != "-1" {
+		query = query.Where("status = ?", status)
+	}
+	if uid > 0 {
+		query = query.Where("uid = ?", uid)
+	}
+	if payType > 0 {
+		query = query.Where("type = ?", payType)
+	}
+	if startDate != "" {
+		if t, err := time.Parse("2006-01-02", startDate); err == nil {
+			query = query.Where("addtime >= ?", t)
+		}
+	}
+	if endDate != "" {
+		if t, err := time.Parse("2006-01-02", endDate); err == nil {
+			query = query.Where("addtime < ?", t.AddDate(0, 0, 1))
+		}
+	}
+
+	var total int64
+	query.Count(&total)
+	if total > int64(limit) {
+		total = int64(limit)
+	}
+
+	var orders []model.Order
+	query.Order("addtime DESC").Limit(limit).Find(&orders)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":  0,
+		"count": total,
+		"data":  orders,
+	})
+}
+
+func adminStringParam(c *gin.Context, key string) string {
+	if v := strings.TrimSpace(c.Query(key)); v != "" {
+		return v
+	}
+	return strings.TrimSpace(c.PostForm(key))
+}
+
+func adminIntParam(c *gin.Context, key string, defaultValue int) int {
+	value := adminStringParam(c, key)
+	if value == "" {
+		return defaultValue
+	}
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return i
+}
+
+func formatBytes(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	if size < 1024*1024 {
+		return fmt.Sprintf("%.2f KB", float64(size)/1024)
+	}
+	return fmt.Sprintf("%.2f MB", float64(size)/(1024*1024))
 }

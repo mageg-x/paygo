@@ -13,9 +13,9 @@ import (
 
 // CronService 计划任务服务
 type CronService struct {
-	cron   *cron.Cron
+	cron    *cron.Cron
 	entries map[string]cron.EntryID
-	mu     sync.RWMutex
+	mu      sync.RWMutex
 }
 
 var (
@@ -27,7 +27,7 @@ var (
 func GetCronService() *CronService {
 	cronOnce.Do(func() {
 		cronService = &CronService{
-			cron:   cron.New(cron.WithSeconds()),
+			cron:    cron.New(cron.WithSeconds()),
 			entries: make(map[string]cron.EntryID),
 		}
 	})
@@ -231,7 +231,7 @@ func CleanupTask() {
 
 	// 清理7天前的日志
 	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
-	config.DB.Where("time < ?", sevenDaysAgo).Delete(&model.Log{})
+	config.DB.Where("date < ?", sevenDaysAgo).Delete(&model.Log{})
 
 	log.Printf("[Cron] 清理完成")
 }

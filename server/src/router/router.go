@@ -73,6 +73,7 @@ func SetupRouter() *gin.Engine {
 			adminAuth.POST("/user/update", adminHandler.UpdateUser)
 			adminAuth.GET("/user/edit", adminHandler.EditUserPage)
 			adminAuth.POST("/order/op", adminHandler.AjaxOrderOp)
+			adminAuth.GET("/orders", adminHandler.AjaxOrderList)
 			adminAuth.POST("/orders", adminHandler.AjaxOrderList)
 			adminAuth.POST("/settle/op", adminHandler.AjaxSettleOp)
 			adminAuth.GET("/settles", adminHandler.AjaxSettleList)
@@ -133,6 +134,11 @@ func SetupRouter() *gin.Engine {
 			adminAuth.POST("/upload/cert", adminHandler.UploadCert)
 			// 格式化JSON
 			adminAuth.POST("/format/json", adminHandler.FormatJson)
+			// 数据清理
+			adminAuth.GET("/clean/stats", adminHandler.AjaxCleanStats)
+			adminAuth.POST("/clean/run", adminHandler.AjaxCleanRun)
+			// 数据导出
+			adminAuth.GET("/export/orders", adminHandler.AjaxExportOrders)
 		}
 
 		// 商户后台 API - 公开
@@ -147,13 +153,18 @@ func SetupRouter() *gin.Engine {
 		{
 			userAuth.GET("/info", userHandler.Info)
 			userAuth.POST("/logout", userHandler.Logout)
+			userAuth.GET("/orders", userHandler.AjaxOrderList)
 			userAuth.POST("/order/list", userHandler.AjaxOrderList)
+			userAuth.POST("/order/op", userHandler.AjaxOrderOp)
 			userAuth.POST("/settle/apply", userHandler.ApplySettle)
+			userAuth.GET("/settles", userHandler.AjaxSettleList)
 			userAuth.POST("/settle/list", userHandler.AjaxSettleList)
+			userAuth.GET("/records", userHandler.AjaxRecordList)
 			userAuth.POST("/record/list", userHandler.AjaxRecordList)
 			userAuth.POST("/editinfo", userHandler.UpdateProfile)
 			userAuth.POST("/certificate", userHandler.SubmitCertificate)
 			userAuth.GET("/group/list", userHandler.AjaxGroupList)
+			userAuth.POST("/group/buy", userHandler.AjaxGroupBuy)
 			userAuth.GET("/group/transfer/list", userHandler.AjaxGroupTransferList)
 			userAuth.POST("/group/transfer/create", userHandler.AjaxGroupTransferCreate)
 		}

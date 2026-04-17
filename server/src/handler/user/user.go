@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -141,6 +142,7 @@ func (h *UserHandler) Info(c *gin.Context) {
 		"msg":  "success",
 		"data": gin.H{
 			"uid":      user.UID,
+			"gid":      user.GID,
 			"username": user.Username,
 			"email":    user.Email,
 			"phone":    user.Phone,
@@ -149,6 +151,7 @@ func (h *UserHandler) Info(c *gin.Context) {
 			"status":   user.Status,
 			"key":      user.Key,
 			"cert":     user.Cert,
+			"endtime":  user.Endtime,
 		},
 	})
 }
@@ -221,7 +224,7 @@ func (h *UserHandler) OrderList(c *gin.Context) {
 	}
 
 	query.Count(&total)
-	query.Offset((page-1)*pageSize).Limit(pageSize).Order("id DESC").Find(&orders)
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&orders)
 
 	c.HTML(http.StatusOK, "user/order.html", gin.H{
 		"orders": orders,
@@ -240,7 +243,7 @@ func (h *UserHandler) SettleList(c *gin.Context) {
 	var total int64
 
 	config.DB.Model(&model.Settle{}).Where("uid = ?", uid).Count(&total)
-	config.DB.Where("uid = ?", uid).Offset((page-1)*pageSize).Limit(pageSize).
+	config.DB.Where("uid = ?", uid).Offset((page - 1) * pageSize).Limit(pageSize).
 		Order("id DESC").Find(&settles)
 
 	c.HTML(http.StatusOK, "user/settle.html", gin.H{
@@ -260,7 +263,7 @@ func (h *UserHandler) RecordList(c *gin.Context) {
 	var total int64
 
 	config.DB.Model(&model.Record{}).Where("uid = ?", uid).Count(&total)
-	config.DB.Where("uid = ?", uid).Offset((page-1)*pageSize).Limit(pageSize).
+	config.DB.Where("uid = ?", uid).Offset((page - 1) * pageSize).Limit(pageSize).
 		Order("id DESC").Find(&records)
 
 	c.HTML(http.StatusOK, "user/record.html", gin.H{
@@ -273,14 +276,20 @@ func (h *UserHandler) RecordList(c *gin.Context) {
 // 申请结算
 func (h *UserHandler) ApplySettle(c *gin.Context) {
 	uid := c.GetUint("uid")
-	account := c.PostForm("account")
-	username := c.PostForm("username")
-	moneyStr := c.PostForm("money")
-	settleType, _ := strconv.Atoi(c.PostForm("type"))
+	var req struct {
+		Account  string  `json:"account"`
+		Username string  `json:"username"`
+		Money    float64 `json:"money"`
+		Type     int     `json:"type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.Account = c.PostForm("account")
+		req.Username = c.PostForm("username")
+		req.Money, _ = strconv.ParseFloat(c.PostForm("money"), 10)
+		req.Type, _ = strconv.Atoi(c.PostForm("type"))
+	}
 
-	money, _ := strconv.ParseFloat(moneyStr, 10)
-
-	settle, err := h.settleSvc.ApplySettle(uid, account, username, money, settleType)
+	settle, err := h.settleSvc.ApplySettle(uid, req.Account, req.Username, req.Money, req.Type)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
 		return
@@ -303,19 +312,26 @@ func (h *UserHandler) EditInfo(c *gin.Context) {
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	uid := c.GetUint("uid")
 
-	username := c.PostForm("username")
-	phone := c.PostForm("phone")
-	qq := c.PostForm("qq")
+	var req struct {
+		Username string `json:"username"`
+		Phone    string `json:"phone"`
+		Qq       string `json:"qq"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.Username = c.PostForm("username")
+		req.Phone = c.PostForm("phone")
+		req.Qq = c.PostForm("qq")
+	}
 
 	data := map[string]interface{}{}
-	if username != "" {
-		data["username"] = username
+	if req.Username != "" {
+		data["username"] = req.Username
 	}
-	if phone != "" {
-		data["phone"] = phone
+	if req.Phone != "" {
+		data["phone"] = req.Phone
 	}
-	if qq != "" {
-		data["qq"] = qq
+	if req.Qq != "" {
+		data["qq"] = req.Qq
 	}
 
 	err := h.authSvc.UpdateUser(uid, data)
@@ -340,16 +356,23 @@ func (h *UserHandler) CertificatePage(c *gin.Context) {
 // 提交实名认证
 func (h *UserHandler) SubmitCertificate(c *gin.Context) {
 	uid := c.GetUint("uid")
-	certname := c.PostForm("certname")
-	certno := c.PostForm("certno")
-	certtype, _ := strconv.Atoi(c.PostForm("certtype"))
+	var req struct {
+		Certname string `json:"certname"`
+		Certno   string `json:"certno"`
+		Certtype int    `json:"certtype"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.Certname = c.PostForm("certname")
+		req.Certno = c.PostForm("certno")
+		req.Certtype, _ = strconv.Atoi(c.PostForm("certtype"))
+	}
 
 	data := map[string]interface{}{
-		"cert":      1, // 待审核
-		"certname":  certname,
-		"certno":    certno,
-		"certtype":  certtype,
-		"certtime":  time.Now(),
+		"cert":     1, // 待审核
+		"certname": req.Certname,
+		"certno":   req.Certno,
+		"certtype": req.Certtype,
+		"certtime": time.Now(),
 	}
 
 	err := h.authSvc.UpdateUser(uid, data)
@@ -364,9 +387,15 @@ func (h *UserHandler) SubmitCertificate(c *gin.Context) {
 // API: 订单列表
 func (h *UserHandler) AjaxOrderList(c *gin.Context) {
 	uid := c.GetUint("uid")
-	page, _ := strconv.Atoi(c.PostForm("page"))
-	pageSize, _ := strconv.Atoi(c.PostForm("limit"))
-	status := c.PostForm("status")
+	page := userIntParam(c, "page", 1)
+	pageSize := userIntParam(c, "limit", 20)
+	status := userStringParam(c, "status")
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
 
 	orders, total, _ := h.orderSvc.GetUserOrders(uid, -1, page, pageSize)
 
@@ -386,8 +415,14 @@ func (h *UserHandler) AjaxOrderList(c *gin.Context) {
 // API: 结算列表
 func (h *UserHandler) AjaxSettleList(c *gin.Context) {
 	uid := c.GetUint("uid")
-	page, _ := strconv.Atoi(c.PostForm("page"))
-	pageSize, _ := strconv.Atoi(c.PostForm("limit"))
+	page := userIntParam(c, "page", 1)
+	pageSize := userIntParam(c, "limit", 20)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
 
 	settles, total, _ := h.settleSvc.GetUserSettles(uid, page, pageSize)
 
@@ -402,9 +437,15 @@ func (h *UserHandler) AjaxSettleList(c *gin.Context) {
 // API: 资金记录
 func (h *UserHandler) AjaxRecordList(c *gin.Context) {
 	uid := c.GetUint("uid")
-	page, _ := strconv.Atoi(c.PostForm("page"))
-	pageSize, _ := strconv.Atoi(c.PostForm("limit"))
-	action, _ := strconv.Atoi(c.PostForm("action"))
+	page := userIntParam(c, "page", 1)
+	pageSize := userIntParam(c, "limit", 20)
+	action := userIntParam(c, "action", 0)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
 
 	records, total, _ := h.transferSvc.GetUserRecords(uid, action, page, pageSize)
 
@@ -414,6 +455,62 @@ func (h *UserHandler) AjaxRecordList(c *gin.Context) {
 		"count": total,
 		"data":  records,
 	})
+}
+
+// API: 订单操作（商户）
+func (h *UserHandler) AjaxOrderOp(c *gin.Context) {
+	uid := c.GetUint("uid")
+
+	var req struct {
+		Action  string  `json:"action" binding:"required"`
+		TradeNo string  `json:"trade_no" binding:"required"`
+		Money   float64 `json:"money"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	order, err := h.orderSvc.GetOrder(req.TradeNo)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+	if order.UID != uid {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "订单不属于当前商户"})
+		return
+	}
+
+	switch req.Action {
+	case "notify":
+		if err := h.orderSvc.RetryNotify(req.TradeNo); err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "已触发重新通知"})
+		return
+	case "refund":
+		if req.Money <= 0 {
+			available := order.Getmoney - order.Refundmoney
+			if order.Tid == 2 {
+				available = order.Money - order.Refundmoney
+			}
+			if available <= 0 {
+				c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "可退款金额为0"})
+				return
+			}
+			req.Money = available
+		}
+		if err := h.orderSvc.Refund(req.TradeNo, req.Money); err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "退款成功"})
+		return
+	default:
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+		return
+	}
 }
 
 // 找回密码 - 发送验证码
@@ -493,6 +590,92 @@ func (h *UserHandler) AjaxGroupList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": groups})
 }
 
+// AJAX: 购买用户组（余额支付）
+func (h *UserHandler) AjaxGroupBuy(c *gin.Context) {
+	uid := c.GetUint("uid")
+	var req struct {
+		GroupID uint `json:"group_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	var user model.User
+	if err := config.DB.Where("uid = ?", uid).First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "用户不存在"})
+		return
+	}
+
+	var group model.Group
+	if err := config.DB.Where("gid = ? AND isbuy = 1", req.GroupID).First(&group).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "用户组不存在或不可购买"})
+		return
+	}
+
+	if group.Price <= 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "该用户组未设置售价"})
+		return
+	}
+	if user.Money < group.Price {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "余额不足"})
+		return
+	}
+
+	tx := config.DB.Begin()
+	oldMoney := user.Money
+	newMoney := user.Money - group.Price
+	updates := map[string]interface{}{
+		"gid":   group.GID,
+		"money": newMoney,
+	}
+	if group.Expire > 0 {
+		base := time.Now()
+		if user.Endtime.After(base) && user.GID == group.GID {
+			base = user.Endtime
+		}
+		updates["endtime"] = base.AddDate(0, group.Expire, 0)
+	}
+
+	if err := tx.Model(&model.User{}).Where("uid = ?", uid).Updates(updates).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "购买失败"})
+		return
+	}
+
+	tradeNo := fmt.Sprintf("GB%d%d", uid, time.Now().Unix())
+	record := &model.Record{
+		UID:      uid,
+		Action:   9,
+		Money:    -group.Price,
+		Oldmoney: oldMoney,
+		Newmoney: newMoney,
+		Type:     "group_buy",
+		TradeNo:  tradeNo,
+		Date:     time.Now(),
+	}
+	if err := tx.Create(record).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "购买失败"})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "购买失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "购买成功",
+		"data": gin.H{
+			"gid":     group.GID,
+			"name":    group.Name,
+			"balance": newMoney,
+		},
+	})
+}
+
 // AJAX: 用户组转让记录
 func (h *UserHandler) AjaxGroupTransferList(c *gin.Context) {
 	uid := c.GetInt("uid")
@@ -523,11 +706,11 @@ func (h *UserHandler) AjaxGroupTransferCreate(c *gin.Context) {
 
 	// 创建转让记录
 	transfer := model.UserGroupTransfer{
-		FromUID:  uint(uid),
-		ToUID:    uint(req.TargetUID),
-		GroupID:  req.GroupID,
-		Price:    req.Price,
-		Status:   0,
+		FromUID: uint(uid),
+		ToUID:   uint(req.TargetUID),
+		GroupID: req.GroupID,
+		Price:   req.Price,
+		Status:  0,
 	}
 	if err := config.DB.Create(&transfer).Error; err != nil {
 		log.Printf("[用户组转让创建记录失败] from_uid=%d, to_uid=%d, error=%s", uid, req.TargetUID, err.Error())
@@ -536,4 +719,23 @@ func (h *UserHandler) AjaxGroupTransferCreate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "转让请求已提交"})
+}
+
+func userStringParam(c *gin.Context, key string) string {
+	if v := strings.TrimSpace(c.Query(key)); v != "" {
+		return v
+	}
+	return strings.TrimSpace(c.PostForm(key))
+}
+
+func userIntParam(c *gin.Context, key string, defaultValue int) int {
+	value := userStringParam(c, key)
+	if value == "" {
+		return defaultValue
+	}
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return i
 }

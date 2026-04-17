@@ -184,7 +184,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getUserOrders } from '@/api/user'
+import { getUserOrders, userOrderOp } from '@/api/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 
@@ -241,8 +241,24 @@ function showDetail(order: any) {
   detailVisible.value = true
 }
 
-function handleNotify(order: any) {
-  ElMessage.info('通知功能开发中')
+async function handleNotify(order: any) {
+  try {
+    await ElMessageBox.confirm('确定要重新通知该订单吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  try {
+    const res = await userOrderOp({ action: 'notify', trade_no: order.trade_no })
+    ElMessage.success(res.msg || '已触发重新通知')
+    fetchOrders()
+  } catch (error) {
+    console.error('重新通知失败:', error)
+  }
 }
 
 function handleRefund(order: any) {
@@ -271,9 +287,14 @@ async function submitRefund() {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    // TODO: 调用退款API
-    ElMessage.success('退款申请已提交')
+    const res = await userOrderOp({
+      action: 'refund',
+      trade_no: refundForm.value.trade_no,
+      money: amount
+    })
+    ElMessage.success(res.msg || '退款成功')
     refundVisible.value = false
+    fetchOrders()
   } catch {
     return
   }

@@ -171,6 +171,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { getCleanStats, runClean } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Clock, AlertCircle, FileText, Database } from 'lucide-vue-next'
 
@@ -188,11 +189,21 @@ const cacheSize = ref('0 MB')
 const records = ref<any[]>([])
 
 async function fetchStats() {
-  // TODO: 从后端获取统计数据
-  orderCount.value = Math.floor(Math.random() * 100)
-  failedNotifyCount.value = Math.floor(Math.random() * 50)
-  logCount.value = Math.floor(Math.random() * 500)
-  cacheSize.value = '12.5 MB'
+  try {
+    const res = await getCleanStats({
+      order_timeout: cleanForm.value.order_timeout,
+      max_retry: cleanForm.value.max_retry,
+      log_days: cleanForm.value.log_days
+    })
+    if (res.code === 0 && res.data) {
+      orderCount.value = res.data.order_count || 0
+      failedNotifyCount.value = res.data.failed_notify_count || 0
+      logCount.value = res.data.log_count || 0
+      cacheSize.value = res.data.cache_size || '0 B'
+    }
+  } catch (error) {
+    console.error('获取清理统计失败:', error)
+  }
 }
 
 async function cleanOrders() {
@@ -202,9 +213,13 @@ async function cleanOrders() {
       '清理确认',
       { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     )
-    // TODO: 调用后端API
-    ElMessage.success('清理完成')
-    addRecord('超时订单清理', orderCount.value)
+    const res = await runClean({
+      action: 'orders',
+      order_timeout: Number(cleanForm.value.order_timeout)
+    })
+    const count = res.data?.count ?? orderCount.value
+    ElMessage.success(`清理完成，共处理 ${count} 条`)
+    addRecord('超时订单清理', count)
     fetchStats()
   } catch {
     return
@@ -218,9 +233,13 @@ async function cleanFailedNotifies() {
       '清理确认',
       { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     )
-    // TODO: 调用后端API
-    ElMessage.success('清理完成')
-    addRecord('失败回调清理', failedNotifyCount.value)
+    const res = await runClean({
+      action: 'failed_notifies',
+      max_retry: Number(cleanForm.value.max_retry)
+    })
+    const count = res.data?.count ?? failedNotifyCount.value
+    ElMessage.success(`清理完成，共处理 ${count} 条`)
+    addRecord('失败回调清理', count)
     fetchStats()
   } catch {
     return
@@ -234,9 +253,13 @@ async function cleanLogs() {
       '清理确认',
       { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     )
-    // TODO: 调用后端API
-    ElMessage.success('清理完成')
-    addRecord('操作日志清理', logCount.value)
+    const res = await runClean({
+      action: 'logs',
+      log_days: Number(cleanForm.value.log_days)
+    })
+    const count = res.data?.count ?? logCount.value
+    ElMessage.success(`清理完成，共处理 ${count} 条`)
+    addRecord('操作日志清理', count)
     fetchStats()
   } catch {
     return
@@ -250,10 +273,11 @@ async function cleanCache() {
       '清理确认',
       { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     )
-    // TODO: 调用后端API
+    const res = await runClean({ action: 'cache' })
+    const count = res.data?.count ?? 0
     ElMessage.success('缓存已清理')
-    addRecord('缓存清理', 1)
-    cacheSize.value = '0 MB'
+    addRecord('缓存清理', count)
+    await fetchStats()
   } catch {
     return
   }

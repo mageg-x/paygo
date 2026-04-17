@@ -91,6 +91,16 @@ export function getUserGroupList(): Promise<ApiResponse> {
 }
 
 // 创建用户组转让
-export function createUserGroupTransfer(data: { target_uid: number; group_id: string; price: number }): Promise<ApiResponse> {
+export function createUserGroupTransfer(data: { target_uid: number; group_id: number; price: number }): Promise<ApiResponse> {
   return request.post('/user/group/transfer/create', data)
+}
+
+// 商户订单操作
+export function userOrderOp(data: { action: 'notify' | 'refund'; trade_no: string; money?: number }): Promise<ApiResponse> {
+  return request.post('/user/order/op', data)
+}
+
+// 购买用户组
+export function buyUserGroup(data: { group_id: number }): Promise<ApiResponse> {
+  return request.post('/user/group/buy', data)
 }
