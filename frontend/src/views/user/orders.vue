@@ -10,7 +10,8 @@
           <option value="">全部状态</option>
           <option value="0">待支付</option>
           <option value="1">已支付</option>
-          <option value="2">已关闭</option>
+          <option value="2">已退款</option>
+          <option value="3">已冻结</option>
         </select>
         <input v-model="searchTradeNo" type="text" placeholder="订单号"
           class="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -55,9 +56,17 @@
                   class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                   待支付
                 </span>
+                <span v-else-if="order.status === 2"
+                  class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                  已退款
+                </span>
+                <span v-else-if="order.status === 3"
+                  class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                  已冻结
+                </span>
                 <span v-else
                   class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                  已关闭
+                  未知
                 </span>
               </td>
               <td>{{ dayjs(order.addtime).format('YYYY-MM-DD HH:mm') }}</td>
@@ -113,7 +122,9 @@
               <div>
                 <span v-if="currentOrder.status === 1" class="text-emerald-600">已支付</span>
                 <span v-else-if="currentOrder.status === 0" class="text-amber-600">待支付</span>
-                <span v-else class="text-gray-500">已关闭</span>
+                <span v-else-if="currentOrder.status === 2" class="text-blue-600">已退款</span>
+                <span v-else-if="currentOrder.status === 3" class="text-red-600">已冻结</span>
+                <span v-else class="text-gray-500">未知</span>
               </div>
               <div class="text-gray-500">创建时间:</div>
               <div>{{ dayjs(currentOrder.addtime).format('YYYY-MM-DD HH:mm:ss') }}</div>
@@ -184,9 +195,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getUserOrders, userOrderOp } from '@/api/user'
+import { getUserInfo, getUserOrders, userOrderOp } from '@/api/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
+import { useAppStore } from '@/stores/app'
+
+const appStore = useAppStore()
 
 const orders = ref<any[]>([])
 const page = ref(1)
@@ -222,17 +236,33 @@ async function fetchOrders() {
     if (filterStatus.value !== '') {
       params.status = filterStatus.value
     }
-    const res = await getUserOrders(params)
-    if (res.code === 0) {
-      let data = res.data || []
-      if (searchTradeNo.value) {
-        data = data.filter((o: any) => o.trade_no.includes(searchTradeNo.value))
-      }
-      orders.value = data
-      total.value = res.count || 0
+    if (searchTradeNo.value) {
+      params.trade_no = searchTradeNo.value.trim()
     }
+    const res = await getUserOrders(params)
+    orders.value = Array.isArray(res.data) ? res.data : []
+    total.value = res.count || 0
   } catch (error) {
     console.error('获取订单列表失败:', error)
+    ElMessage.error((error as any)?.message || '获取订单列表失败')
+  }
+}
+
+async function initUser() {
+  const res = await getUserInfo()
+  if (!res.data?.uid) {
+    throw new Error('未获取到当前商户信息')
+  }
+  appStore.userInfo = {
+    ...(appStore.userInfo || {
+      uid: Number(res.data.uid),
+      username: '',
+      email: '',
+      phone: '',
+      money: 0,
+      status: 1
+    }),
+    uid: Number(res.data.uid)
   }
 }
 
@@ -262,10 +292,15 @@ async function handleNotify(order: any) {
 }
 
 function handleRefund(order: any) {
+  const remain = Math.max(0, Number(order.money || 0) - Number(order.refundmoney || 0))
+  if (remain <= 0) {
+    ElMessage.warning('可退款金额为0')
+    return
+  }
   refundForm.value = {
     trade_no: order.trade_no,
     money: order.money,
-    amount: order.money.toString()
+    amount: remain.toFixed(2)
   }
   detailVisible.value = false
   refundVisible.value = true
@@ -273,12 +308,13 @@ function handleRefund(order: any) {
 
 async function submitRefund() {
   const amount = parseFloat(refundForm.value.amount)
+  const remain = Math.max(0, Number(refundForm.value.money || 0) - Number(currentOrder.value?.refundmoney || 0))
   if (isNaN(amount) || amount <= 0) {
     ElMessage.warning('请输入有效的退款金额')
     return
   }
-  if (amount > refundForm.value.money) {
-    ElMessage.warning('退款金额不能超过订单金额')
+  if (amount > remain) {
+    ElMessage.warning(`退款金额不能超过可退金额 ${remain.toFixed(2)} 元`)
     return
   }
   try {
@@ -300,7 +336,12 @@ async function submitRefund() {
   }
 }
 
-onMounted(() => {
-  fetchOrders()
+onMounted(async () => {
+  try {
+    await initUser()
+    await fetchOrders()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '初始化失败')
+  }
 })
 </script>

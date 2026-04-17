@@ -503,6 +503,10 @@ func (s *OrderService) markNotifyFailed(tradeNo string) {
 
 // 订单退款
 func (s *OrderService) Refund(tradeNo string, money float64) error {
+	if money <= 0 {
+		return errors.New("退款金额必须大于0")
+	}
+
 	var order model.Order
 	result := config.DB.Where("trade_no = ?", tradeNo).First(&order)
 	if result.Error != nil {
@@ -527,9 +531,9 @@ func (s *OrderService) Refund(tradeNo string, money float64) error {
 
 	// 本地校验提前做，避免上游退款成功但本地记账失败
 	if order.Tid != 2 {
-		availableRefund := order.Getmoney - order.Refundmoney
+		availableRefund := order.Money - order.Refundmoney
 		if money > availableRefund {
-			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=refund exceeds available getmoney, available=%.2f", tradeNo, money, availableRefund)
+			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=refund exceeds available money, available=%.2f", tradeNo, money, availableRefund)
 			return errors.New("退款金额超过可退金额")
 		}
 
@@ -601,10 +605,10 @@ func (s *OrderService) Refund(tradeNo string, money float64) error {
 		}
 		tx.Create(record)
 	} else {
-		// 普通订单退款：从商户可得金额扣除
-		availableRefund := order.Getmoney - order.Refundmoney
+		// 普通订单退款：按退款金额从商户余额扣除
+		availableRefund := order.Money - order.Refundmoney
 		if money > availableRefund {
-			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=refund exceeds available getmoney, available=%.2f", tradeNo, money, availableRefund)
+			log.Printf("[refund_failed] trade_no=%s, money=%.2f, reason=refund exceeds available money, available=%.2f", tradeNo, money, availableRefund)
 			tx.Rollback()
 			return errors.New("退款金额超过可退金额")
 		}
@@ -625,7 +629,7 @@ func (s *OrderService) Refund(tradeNo string, money float64) error {
 		tx.Model(&order).Update("refundmoney", refundmoney)
 
 		// 如果完全退款，更新状态
-		if refundmoney >= order.Getmoney {
+		if refundmoney >= order.Money {
 			tx.Model(&order).Update("status", model.OrderStatusRefunded)
 		}
 
@@ -702,8 +706,8 @@ func (s *OrderService) GetOrderByOutTradeNo(outTradeNo string, uid uint) (*model
 }
 
 // 获取商户订单列表
-func (s *OrderService) GetUserOrders(uid uint, status int, page, pageSize int) ([]model.Order, int64, error) {
-	var orders []model.Order
+func (s *OrderService) GetUserOrders(uid uint, status int, page, pageSize int, tradeNo string) ([]model.Order, int64, error) {
+	orders := make([]model.Order, 0)
 	var total int64
 
 	query := config.DB.Model(&model.Order{}).Where("uid = ?", uid)
@@ -711,10 +715,13 @@ func (s *OrderService) GetUserOrders(uid uint, status int, page, pageSize int) (
 	if status >= 0 {
 		query = query.Where("status = ?", status)
 	}
+	if strings.TrimSpace(tradeNo) != "" {
+		query = query.Where("trade_no LIKE ?", "%"+strings.TrimSpace(tradeNo)+"%")
+	}
 
 	query.Count(&total)
 
-	result := query.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&orders)
+	result := query.Order("addtime DESC, trade_no DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&orders)
 	if result.Error != nil {
 		return nil, 0, result.Error
 	}

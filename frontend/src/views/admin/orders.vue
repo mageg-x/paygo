@@ -204,7 +204,42 @@ async function fetchOrders() {
 
 async function handleOp(action: string, tradeNo: string) {
   const actionText = { refund: '退款', freeze: '冻结', unfreeze: '解冻', refresh: '刷新状态' }[action] || '操作'
-  const needConfirm = action !== 'refresh'
+  let refundMoney: number | undefined
+  const targetOrder = orders.value.find(o => o.trade_no === tradeNo)
+
+  if (action === 'refund') {
+    const remain = Math.max(0, Number((targetOrder?.money || 0) - ((targetOrder as any)?.refundmoney || 0)))
+    if (remain <= 0) {
+      ElMessage.warning('可退款金额为0')
+      return
+    }
+    try {
+      const { value } = await ElMessageBox.prompt(
+        `请输入退款金额（最大 ${remain.toFixed(2)} 元）`,
+        '退款确认',
+        {
+          confirmButtonText: '确认退款',
+          cancelButtonText: '取消',
+          inputValue: remain.toFixed(2),
+          inputPattern: /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/,
+          inputErrorMessage: '请输入合法金额（最多2位小数）'
+        }
+      )
+      refundMoney = Number(value)
+      if (!refundMoney || refundMoney <= 0) {
+        ElMessage.warning('退款金额必须大于0')
+        return
+      }
+      if (refundMoney > remain) {
+        ElMessage.warning(`退款金额不能超过 ${remain.toFixed(2)} 元`)
+        return
+      }
+    } catch {
+      return
+    }
+  }
+
+  const needConfirm = action !== 'refresh' && action !== 'refund'
   if (needConfirm) {
     try {
       await ElMessageBox.confirm(`确定要${actionText}该订单吗？`, '提示', {
@@ -217,7 +252,11 @@ async function handleOp(action: string, tradeNo: string) {
     }
   }
   try {
-    const res = await orderOp({ action, trade_no: tradeNo })
+    const payload: Record<string, any> = { action, trade_no: tradeNo }
+    if (action === 'refund' && refundMoney !== undefined) {
+      payload.money = refundMoney
+    }
+    const res = await orderOp(payload)
     ElMessage.success(res.msg || `${actionText}成功`)
     fetchOrders()
   } catch (error) {

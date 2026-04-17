@@ -292,8 +292,10 @@ async function loadChannels() {
 }
 
 async function submitTest() {
-  if (!pid.value) {
-    ElMessage.warning('未获取到商户信息，请重新登录')
+  try {
+    await initUser()
+  } catch (error: any) {
+    ElMessage.warning(error?.message || '未获取到商户信息，请重新登录')
     return
   }
   if (!form.value.type) {
@@ -381,20 +383,31 @@ function statusText(status: number) {
   const map: Record<number, string> = {
     0: '待支付',
     1: '已支付',
-    2: '已关闭'
+    2: '已退款',
+    3: '已冻结'
   }
   return map[status] || `未知(${status})`
 }
 
 async function initUser() {
-  if (appStore.userInfo?.uid) {
-    pid.value = appStore.userInfo.uid
-  } else {
-    const res = await getUserInfo()
-    if (res.data?.uid) {
-      pid.value = Number(res.data.uid)
+  // 强制以服务端当前登录态为准，避免本地缓存 UID 过期导致测试单下到错误商户。
+  const res = await getUserInfo()
+  if (res.data?.uid) {
+    pid.value = Number(res.data.uid)
+    appStore.userInfo = {
+      ...(appStore.userInfo || {
+        uid: pid.value,
+        username: '',
+        email: '',
+        phone: '',
+        money: 0,
+        status: 1
+      }),
+      uid: pid.value
     }
+    return
   }
+  throw new Error('未获取到当前商户ID')
 }
 
 onMounted(async () => {

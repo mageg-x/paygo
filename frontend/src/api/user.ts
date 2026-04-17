@@ -42,7 +42,7 @@ export function getUserInfo(): Promise<ApiResponse> {
 }
 
 // 获取订单列表
-export function getUserOrders(params: { page?: number; limit?: number; status?: number }): Promise<ApiResponse> {
+export function getUserOrders(params: { page?: number; limit?: number; status?: number | string; trade_no?: string }): Promise<ApiResponse> {
   return request.get('/user/orders', { params })
 }
 

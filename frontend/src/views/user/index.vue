@@ -133,8 +133,8 @@
               </td>
               <td class="text-primary-600 font-medium">¥{{ order.money }}</td>
               <td>
-                <span :class="['badge', order.status === 1 ? 'badge-success' : 'badge-warning']">
-                  {{ order.status === 1 ? '已支付' : '待支付' }}
+                <span :class="['badge', orderStatusClass(order.status)]">
+                  {{ orderStatusText(order.status) }}
                 </span>
               </td>
               <td>{{ order.addtime }}</td>
@@ -176,6 +176,26 @@ function typeName(type: number) {
     4: '银行卡'
   }
   return map[type] || '其他'
+}
+
+function orderStatusText(status: number) {
+  const map: Record<number, string> = {
+    0: '待支付',
+    1: '已支付',
+    2: '已退款',
+    3: '已冻结'
+  }
+  return map[status] || '未知'
+}
+
+function orderStatusClass(status: number) {
+  const map: Record<number, string> = {
+    0: 'badge-warning',
+    1: 'badge-success',
+    2: 'badge-info',
+    3: 'badge-danger'
+  }
+  return map[status] || 'badge-warning'
 }
 
 async function fetchData() {

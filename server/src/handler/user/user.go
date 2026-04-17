@@ -261,7 +261,7 @@ func (h *UserHandler) Index(c *gin.Context) {
 
 	// 最新订单
 	var recentOrders []model.Order
-	config.DB.Where("uid = ?", uid).Order("id DESC").Limit(10).Find(&recentOrders)
+	config.DB.Where("uid = ?", uid).Order("addtime DESC, trade_no DESC").Limit(10).Find(&recentOrders)
 
 	// 公告
 	var announces []model.Anounce
@@ -300,7 +300,7 @@ func (h *UserHandler) OrderList(c *gin.Context) {
 	}
 
 	query.Count(&total)
-	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("id DESC").Find(&orders)
+	query.Offset((page - 1) * pageSize).Limit(pageSize).Order("addtime DESC, trade_no DESC").Find(&orders)
 
 	c.HTML(http.StatusOK, "user/order.html", gin.H{
 		"orders": orders,
@@ -466,6 +466,7 @@ func (h *UserHandler) AjaxOrderList(c *gin.Context) {
 	page := userIntParam(c, "page", 1)
 	pageSize := userIntParam(c, "limit", 20)
 	status := userStringParam(c, "status")
+	tradeNo := userStringParam(c, "trade_no")
 	if page < 1 {
 		page = 1
 	}
@@ -473,11 +474,11 @@ func (h *UserHandler) AjaxOrderList(c *gin.Context) {
 		pageSize = 20
 	}
 
-	orders, total, _ := h.orderSvc.GetUserOrders(uid, -1, page, pageSize)
+	orders, total, _ := h.orderSvc.GetUserOrders(uid, -1, page, pageSize, tradeNo)
 
 	if status != "" && status != "-1" {
 		s, _ := strconv.Atoi(status)
-		orders, total, _ = h.orderSvc.GetUserOrders(uid, s, page, pageSize)
+		orders, total, _ = h.orderSvc.GetUserOrders(uid, s, page, pageSize, tradeNo)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -567,10 +568,7 @@ func (h *UserHandler) AjaxOrderOp(c *gin.Context) {
 		return
 	case "refund":
 		if req.Money <= 0 {
-			available := order.Getmoney - order.Refundmoney
-			if order.Tid == 2 {
-				available = order.Money - order.Refundmoney
-			}
+			available := order.Money - order.Refundmoney
 			if available <= 0 {
 				c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "可退款金额为0"})
 				return

@@ -101,7 +101,7 @@ const categories = ref([
       },
       {
         q: '订单状态如何查询？',
-        a: '使用您的商户ID和密钥，通过/api/pay/query接口查询订单状态。返回的status字段：0=待支付，1=已支付，2=已关闭。',
+        a: '使用您的商户ID和密钥，通过/api/pay/query接口查询订单状态。返回的status字段：0=待支付，1=已支付，2=已退款，3=已冻结。',
         open: false
       },
       {

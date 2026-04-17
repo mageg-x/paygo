@@ -138,7 +138,7 @@ func (h *AdminHandler) OrderList(c *gin.Context) {
 	}
 
 	query.Count(&total)
-	query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&orders)
+	query.Offset(offset).Limit(pageSize).Order("addtime DESC, trade_no DESC").Find(&orders)
 
 	c.HTML(http.StatusOK, "admin/order.html", gin.H{
 		"orders": orders,
@@ -1218,10 +1218,7 @@ func (h *AdminHandler) AjaxOrderOp(c *gin.Context) {
 				err = e
 				break
 			}
-			available := order.Getmoney - order.Refundmoney
-			if order.Tid == 2 {
-				available = order.Money - order.Refundmoney
-			}
+			available := order.Money - order.Refundmoney
 			if available <= 0 {
 				err = fmt.Errorf("可退款金额为0")
 				break
