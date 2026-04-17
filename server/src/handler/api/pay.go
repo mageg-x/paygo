@@ -426,12 +426,24 @@ func (h *PayHandler) Notify(c *gin.Context) {
 
 	result, err := h.paymentSvc.HandleNotify(tradeNo, channel.Plugin, c)
 	if err != nil || !result["success"].(bool) {
-		log.Printf("[pay_notify_failed] trade_no=%s, plugin=%s, reason=handle notify failed, error=%s", tradeNo, channel.Plugin, err.Error())
-		c.String(http.StatusOK, "fail")
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		log.Printf("[pay_notify_failed] trade_no=%s, plugin=%s, reason=handle notify failed, error=%s", tradeNo, channel.Plugin, errMsg)
+		if channel.Plugin == "wxpay" {
+			c.JSON(http.StatusOK, gin.H{"code": "FAIL", "message": "handle failed"})
+		} else {
+			c.String(http.StatusOK, "fail")
+		}
 		return
 	}
 
-	c.String(http.StatusOK, "success")
+	if channel.Plugin == "wxpay" {
+		c.JSON(http.StatusOK, gin.H{"code": "SUCCESS", "message": "success"})
+	} else {
+		c.String(http.StatusOK, "success")
+	}
 }
 
 // 同步回调 (GET /api/pay/return/:trade_no)

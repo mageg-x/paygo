@@ -400,6 +400,8 @@ func (p *AlipayPlugin) submitWeb(params map[string]interface{}, channel model.Ch
 		"subject":      name,
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.trade.page.pay",
@@ -410,7 +412,7 @@ func (p *AlipayPlugin) submitWeb(params map[string]interface{}, channel model.Ch
 		"version":     "1.0",
 		"notify_url":  notifyURL,
 		"return_url":  returnURL,
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -450,21 +452,34 @@ func (p *AlipayPlugin) submitScan(params map[string]interface{}, channel model.C
 		"subject":      name,
 	}
 
+	if authCode, ok := params["auth_code"].(string); ok && authCode != "" {
+		bizContent["auth_code"] = authCode
+	}
+
+	usePrecreate := true
+	if _, ok := params["auth_code"].(string); ok && params["auth_code"].(string) != "" {
+		usePrecreate = false
+	}
+
+	apiMethod := "alipay.trade.precreate"
+	respKey := "alipay_trade_precreate_response"
+	if !usePrecreate {
+		apiMethod = "alipay.trade.pay"
+		respKey = "alipay_trade_pay_response"
+	}
+
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
-		"method":      "alipay.trade.pay",
+		"method":      apiMethod,
 		"format":      "JSON",
 		"charset":     "UTF-8",
 		"sign_type":   "RSA2",
 		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		"version":     "1.0",
 		"notify_url":  notifyURL,
-		"biz_content": bizContent,
-	}
-
-	// 添加 auth_code（扫码枪扫的码）
-	if authCode, ok := params["auth_code"].(string); ok && authCode != "" {
-		bizContent["auth_code"] = authCode
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -481,15 +496,28 @@ func (p *AlipayPlugin) submitScan(params map[string]interface{}, channel model.C
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal([]byte(resp), &result)
-
-	response := result["alipay_trade_pay_response"].(map[string]interface{})
-	if response["code"] != "10000" {
-		log.Printf("[alipay_submit_scan_failed] trade_no=%s, reason=alipay error, code=%s, msg=%s", params["trade_no"], response["code"], response["msg"])
-		return plugin.SubmitResult{Msg: fmt.Sprintf("%s:%s", response["code"], response["msg"])}, nil
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		log.Printf("[alipay_submit_scan_failed] trade_no=%s, reason=parse response failed, error=%s", params["trade_no"], err.Error())
+		return plugin.SubmitResult{Msg: "解析响应失败"}, err
 	}
 
-	// 当面付返回二维码
+	response, ok := result[respKey].(map[string]interface{})
+	if !ok {
+		log.Printf("[alipay_submit_scan_failed] trade_no=%s, reason=missing %s in response", params["trade_no"], respKey)
+		return plugin.SubmitResult{Msg: "响应格式错误"}, nil
+	}
+
+	if code := stringifyAny(response["code"]); code != "10000" {
+		msg := stringifyAny(response["msg"])
+		subMsg := stringifyAny(response["sub_msg"])
+		errMsg := msg
+		if subMsg != "" {
+			errMsg = subMsg
+		}
+		log.Printf("[alipay_submit_scan_failed] trade_no=%s, reason=alipay error, code=%s, msg=%s", params["trade_no"], code, errMsg)
+		return plugin.SubmitResult{Msg: fmt.Sprintf("%s:%s", code, errMsg)}, nil
+	}
+
 	if qrCode, ok := response["qr_code"].(string); ok && qrCode != "" {
 		return plugin.SubmitResult{
 			Type: "qrcode",
@@ -497,9 +525,16 @@ func (p *AlipayPlugin) submitScan(params map[string]interface{}, channel model.C
 		}, nil
 	}
 
+	if tradeNo2, ok := response["trade_no"].(string); ok && tradeNo2 != "" {
+		return plugin.SubmitResult{
+			Type: "scan",
+			Data: map[string]string{"trade_no": tradeNo2},
+		}, nil
+	}
+
 	return plugin.SubmitResult{
 		Type: "scan",
-		Data: map[string]string{"trade_no": response["trade_no"].(string)},
+		Data: map[string]string{"trade_no": tradeNo},
 	}, nil
 }
 
@@ -525,6 +560,8 @@ func (p *AlipayPlugin) submitJSAPI(params map[string]interface{}, channel model.
 		"buyer_id":     openid,
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.trade.create",
@@ -534,7 +571,7 @@ func (p *AlipayPlugin) submitJSAPI(params map[string]interface{}, channel model.
 		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		"version":     "1.0",
 		"notify_url":  notifyURL,
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -551,15 +588,33 @@ func (p *AlipayPlugin) submitJSAPI(params map[string]interface{}, channel model.
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal([]byte(resp), &result)
-
-	response := result["alipay_trade_create_response"].(map[string]interface{})
-	if response["code"] != "10000" {
-		log.Printf("[alipay_submit_jsapi_failed] trade_no=%s, reason=alipay error, code=%s, msg=%s", params["trade_no"], response["code"], response["msg"])
-		return plugin.SubmitResult{Msg: fmt.Sprintf("%s:%s", response["code"], response["msg"])}, nil
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		log.Printf("[alipay_submit_jsapi_failed] trade_no=%s, reason=parse response failed, error=%s", params["trade_no"], err.Error())
+		return plugin.SubmitResult{Msg: "解析响应失败"}, err
 	}
 
-	tradeNo2 := response["trade_no"].(string)
+	response, ok := result["alipay_trade_create_response"].(map[string]interface{})
+	if !ok {
+		log.Printf("[alipay_submit_jsapi_failed] trade_no=%s, reason=missing alipay_trade_create_response", params["trade_no"])
+		return plugin.SubmitResult{Msg: "响应格式错误"}, nil
+	}
+
+	if code := stringifyAny(response["code"]); code != "10000" {
+		msg := stringifyAny(response["msg"])
+		subMsg := stringifyAny(response["sub_msg"])
+		errMsg := msg
+		if subMsg != "" {
+			errMsg = subMsg
+		}
+		log.Printf("[alipay_submit_jsapi_failed] trade_no=%s, reason=alipay error, code=%s, msg=%s", params["trade_no"], code, errMsg)
+		return plugin.SubmitResult{Msg: fmt.Sprintf("%s:%s", code, errMsg)}, nil
+	}
+
+	tradeNo2, ok := response["trade_no"].(string)
+	if !ok || tradeNo2 == "" {
+		log.Printf("[alipay_submit_jsapi_failed] trade_no=%s, reason=missing trade_no in response", params["trade_no"])
+		return plugin.SubmitResult{Msg: "支付宝未返回交易号"}, nil
+	}
 
 	// 返回 JSAPI 调起参数
 	jsApiParams := map[string]interface{}{
@@ -570,7 +625,11 @@ func (p *AlipayPlugin) submitJSAPI(params map[string]interface{}, channel model.
 		"signType":  "RSA2",
 	}
 
-	paySign, _ := p.signParams(jsApiParams, cfg.AppSecret)
+	paySign, err := p.signParams(jsApiParams, cfg.AppSecret)
+	if err != nil {
+		log.Printf("[alipay_submit_jsapi_failed] trade_no=%s, reason=sign jsapi params failed, error=%s", params["trade_no"], err.Error())
+		return plugin.SubmitResult{Msg: "签名失败"}, err
+	}
 	jsApiParams["paySign"] = paySign
 
 	return plugin.SubmitResult{
@@ -599,16 +658,20 @@ func (p *AlipayPlugin) submitApp(params map[string]interface{}, channel model.Ch
 		"subject":      name,
 	}
 
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.trade.app.pay",
 		"format":      "JSON",
 		"charset":     "UTF-8",
 		"sign_type":   "RSA2",
-		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
+		"timestamp":   timestamp,
 		"version":     "1.0",
 		"notify_url":  notifyURL,
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -618,25 +681,8 @@ func (p *AlipayPlugin) submitApp(params map[string]interface{}, channel model.Ch
 	}
 	p2["sign"] = sign
 
-	// 返回 orderString
-	bizContentStr, _ := json.Marshal(bizContent)
-	orderString := fmt.Sprintf("app_id=%s&biz_content=%s&charset=UTF-8&format=JSON&method=alipay.trade.app.pay&notify_url=%s&sign_type=RSA2&timestamp=%s&version=1.0",
-		cfg.AppID, url.QueryEscape(string(bizContentStr)), url.QueryEscape(notifyURL), url.QueryEscape(time.Now().Format("2006-01-02 15:04:05")))
-
-	// 重新签名
-	signStr, _ := p.signParams(map[string]interface{}{
-		"app_id":      cfg.AppID,
-		"biz_content": string(bizContentStr),
-		"charset":     "UTF-8",
-		"format":      "JSON",
-		"method":      "alipay.trade.app.pay",
-		"notify_url":  notifyURL,
-		"sign_type":   "RSA2",
-		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
-		"version":     "1.0",
-	}, cfg.AppSecret)
-
-	orderString += "&sign=" + url.QueryEscape(signStr)
+	orderString := fmt.Sprintf("app_id=%s&biz_content=%s&charset=UTF-8&format=JSON&method=alipay.trade.app.pay&notify_url=%s&sign=%s&sign_type=RSA2&timestamp=%s&version=1.0",
+		cfg.AppID, url.QueryEscape(string(bizContentStr)), url.QueryEscape(notifyURL), url.QueryEscape(sign), url.QueryEscape(timestamp))
 
 	log.Printf("[alipay_submit_app_success] trade_no=%s", params["trade_no"])
 	return plugin.SubmitResult{
@@ -666,6 +712,8 @@ func (p *AlipayPlugin) submitWap(params map[string]interface{}, channel model.Ch
 		"subject":      name,
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.trade.wap.pay",
@@ -676,7 +724,7 @@ func (p *AlipayPlugin) submitWap(params map[string]interface{}, channel model.Ch
 		"version":     "1.0",
 		"notify_url":  notifyURL,
 		"return_url":  returnURL,
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -715,6 +763,8 @@ func (p *AlipayPlugin) submitOrderCode(params map[string]interface{}, channel mo
 		"subject":      name,
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.trade.precreate",
@@ -724,7 +774,7 @@ func (p *AlipayPlugin) submitOrderCode(params map[string]interface{}, channel mo
 		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		"version":     "1.0",
 		"notify_url":  notifyURL,
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -772,11 +822,6 @@ func (p *AlipayPlugin) Mapi(params map[string]interface{}) (plugin.SubmitResult,
 
 // 异步回调
 func (p *AlipayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResult, error) {
-	if err := c.Request.ParseForm(); err != nil {
-		log.Printf("[alipay_notify_failed] trade_no=%s, reason=parse form failed, error=%s", tradeNo, err.Error())
-		return plugin.NotifyResult{Success: false, Message: err.Error()}, err
-	}
-
 	// 获取订单
 	var order model.Order
 	if err := config.DB.Where("trade_no = ?", tradeNo).First(&order).Error; err != nil {
@@ -797,17 +842,24 @@ func (p *AlipayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResu
 		return plugin.NotifyResult{Success: false, Message: err.Error()}, err
 	}
 
-	// 过滤sign参数后验签
+	// 过滤sign参数后验签（兼容 POST 和 GET 两种回调方式）
+	if err := c.Request.ParseForm(); err != nil {
+		log.Printf("[alipay_notify_failed] trade_no=%s, reason=parse form failed, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: err.Error()}, err
+	}
+
 	paramsToVerify := make(map[string]string)
-	for k, v := range c.Request.PostForm {
+	for k, v := range c.Request.Form {
 		if k == "sign" || k == "sign_type" {
 			continue
 		}
-		paramsToVerify[k] = v[0]
+		if len(v) > 0 {
+			paramsToVerify[k] = v[0]
+		}
 	}
 
-	sign := c.Request.PostForm.Get("sign")
-	signType := c.Request.PostForm.Get("sign_type")
+	sign := c.Request.Form.Get("sign")
+	signType := c.Request.Form.Get("sign_type")
 
 	if !p.verifySign(paramsToVerify, sign, signType, cfg.AppKey) {
 		log.Printf("[alipay_notify_failed] trade_no=%s, reason=sign verification failed")
@@ -815,10 +867,10 @@ func (p *AlipayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResu
 	}
 
 	// 获取回调数据
-	outTradeNo := c.Request.PostForm.Get("out_trade_no")
-	tradeStatus := c.Request.PostForm.Get("trade_status")
-	buyerID := c.Request.PostForm.Get("buyer_id")
-	totalAmount := c.Request.PostForm.Get("total_amount")
+	outTradeNo := c.Request.Form.Get("out_trade_no")
+	tradeStatus := c.Request.Form.Get("trade_status")
+	buyerID := c.Request.Form.Get("buyer_id")
+	totalAmount := c.Request.Form.Get("total_amount")
 
 	if outTradeNo != tradeNo {
 		log.Printf("[alipay_notify_failed] trade_no=%s, out_trade_no=%s, reason=trade no mismatch")
@@ -833,11 +885,11 @@ func (p *AlipayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResu
 	}
 
 	if tradeStatus == "TRADE_SUCCESS" || tradeStatus == "TRADE_FINISHED" {
-		log.Printf("[alipay_notify_success] trade_no=%s, api_trade_no=%s, amount=%.2f", tradeNo, c.Request.PostForm.Get("trade_no"), realMoney)
+		log.Printf("[alipay_notify_success] trade_no=%s, api_trade_no=%s, amount=%.2f", tradeNo, c.Request.Form.Get("trade_no"), realMoney)
 		return plugin.NotifyResult{
 			Success:    true,
 			TradeNo:    tradeNo,
-			APITradeNo: c.Request.PostForm.Get("trade_no"),
+			APITradeNo: c.Request.Form.Get("trade_no"),
 			Amount:     realMoney,
 			Buyer:      buyerID,
 			Message:    "成功",
@@ -888,6 +940,8 @@ func (p *AlipayPlugin) Refund(params map[string]interface{}) (plugin.RefundResul
 		"refund_reason":  "用户请求退款",
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.trade.refund",
@@ -896,7 +950,7 @@ func (p *AlipayPlugin) Refund(params map[string]interface{}) (plugin.RefundResul
 		"sign_type":   "RSA2",
 		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		"version":     "1.0",
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -913,12 +967,26 @@ func (p *AlipayPlugin) Refund(params map[string]interface{}) (plugin.RefundResul
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal([]byte(resp), &result)
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		log.Printf("[alipay_refund_failed] trade_no=%s, money=%.2f, reason=parse response failed, error=%s", tradeNo, money, err.Error())
+		return plugin.RefundResult{Code: -1, ErrMsg: "解析响应失败"}, err
+	}
 
-	response := result["alipay_trade_refund_response"].(map[string]interface{})
-	if response["code"] != "10000" {
-		log.Printf("[alipay_refund_failed] trade_no=%s, money=%.2f, reason=alipay error, code=%s, msg=%s", tradeNo, money, response["code"], response["msg"])
-		return plugin.RefundResult{Code: -1, ErrMsg: fmt.Sprintf("%s:%s", response["code"], response["msg"])}, nil
+	response, ok := result["alipay_trade_refund_response"].(map[string]interface{})
+	if !ok {
+		log.Printf("[alipay_refund_failed] trade_no=%s, money=%.2f, reason=missing alipay_trade_refund_response", tradeNo, money)
+		return plugin.RefundResult{Code: -1, ErrMsg: "响应格式错误"}, nil
+	}
+
+	if code := stringifyAny(response["code"]); code != "10000" {
+		msg := stringifyAny(response["msg"])
+		subMsg := stringifyAny(response["sub_msg"])
+		errMsg := msg
+		if subMsg != "" {
+			errMsg = subMsg
+		}
+		log.Printf("[alipay_refund_failed] trade_no=%s, money=%.2f, reason=alipay error, code=%s, msg=%s", tradeNo, money, code, errMsg)
+		return plugin.RefundResult{Code: -1, ErrMsg: fmt.Sprintf("%s:%s", code, errMsg)}, nil
 	}
 
 	return plugin.RefundResult{
@@ -950,6 +1018,8 @@ func (p *AlipayPlugin) Transfer(params map[string]interface{}) (plugin.TransferR
 		"remark":        "商户转账",
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.fund.trans.toaccount.transfer",
@@ -958,7 +1028,7 @@ func (p *AlipayPlugin) Transfer(params map[string]interface{}) (plugin.TransferR
 		"sign_type":   "RSA2",
 		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		"version":     "1.0",
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -975,18 +1045,35 @@ func (p *AlipayPlugin) Transfer(params map[string]interface{}) (plugin.TransferR
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal([]byte(resp), &result)
-
-	response := result["alipay_fund_trans_toaccount_transfer_response"].(map[string]interface{})
-	if response["code"] != "10000" {
-		log.Printf("[alipay_transfer_failed] biz_no=%s, account=%s, money=%.2f, reason=alipay error, code=%s, msg=%s", bizNo, account, money, response["code"], response["msg"])
-		return plugin.TransferResult{Code: -1, ErrMsg: fmt.Sprintf("%s:%s", response["code"], response["msg"])}, nil
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		log.Printf("[alipay_transfer_failed] biz_no=%s, account=%s, money=%.2f, reason=parse response failed, error=%s", bizNo, account, money, err.Error())
+		return plugin.TransferResult{Code: -1, ErrMsg: "解析响应失败"}, err
 	}
+
+	response, ok := result["alipay_fund_trans_toaccount_transfer_response"].(map[string]interface{})
+	if !ok {
+		log.Printf("[alipay_transfer_failed] biz_no=%s, account=%s, money=%.2f, reason=missing alipay_fund_trans_toaccount_transfer_response", bizNo, account, money)
+		return plugin.TransferResult{Code: -1, ErrMsg: "响应格式错误"}, nil
+	}
+
+	if code := stringifyAny(response["code"]); code != "10000" {
+		msg := stringifyAny(response["msg"])
+		subMsg := stringifyAny(response["sub_msg"])
+		errMsg := msg
+		if subMsg != "" {
+			errMsg = subMsg
+		}
+		log.Printf("[alipay_transfer_failed] biz_no=%s, account=%s, money=%.2f, reason=alipay error, code=%s, msg=%s", bizNo, account, money, code, errMsg)
+		return plugin.TransferResult{Code: -1, ErrMsg: fmt.Sprintf("%s:%s", code, errMsg)}, nil
+	}
+
+	orderID, _ := response["order_id"].(string)
+	payDate, _ := response["pay_date"].(string)
 
 	return plugin.TransferResult{
 		Code:    0,
-		OrderID: response["order_id"].(string),
-		PayDate: response["pay_date"].(string),
+		OrderID: orderID,
+		PayDate: payDate,
 	}, nil
 }
 
@@ -1005,6 +1092,8 @@ func (p *AlipayPlugin) TransferQuery(params map[string]interface{}) (plugin.Tran
 		"out_biz_no": bizNo,
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.fund.trans.order.query",
@@ -1013,7 +1102,7 @@ func (p *AlipayPlugin) TransferQuery(params map[string]interface{}) (plugin.Tran
 		"sign_type":   "RSA2",
 		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		"version":     "1.0",
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -1030,27 +1119,44 @@ func (p *AlipayPlugin) TransferQuery(params map[string]interface{}) (plugin.Tran
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal([]byte(resp), &result)
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		log.Printf("[alipay_transfer_query_failed] biz_no=%s, reason=parse response failed, error=%s", bizNo, err.Error())
+		return plugin.TransferQueryResult{Code: -1, ErrMsg: "解析响应失败"}, err
+	}
 
-	response := result["alipay_fund_trans_order_query_response"].(map[string]interface{})
-	if response["code"] != "10000" {
-		log.Printf("[alipay_transfer_query_failed] biz_no=%s, reason=alipay error, code=%s, msg=%s", bizNo, response["code"], response["msg"])
-		return plugin.TransferQueryResult{Code: -1, ErrMsg: fmt.Sprintf("%s:%s", response["code"], response["msg"])}, nil
+	response, ok := result["alipay_fund_trans_order_query_response"].(map[string]interface{})
+	if !ok {
+		log.Printf("[alipay_transfer_query_failed] biz_no=%s, reason=missing alipay_fund_trans_order_query_response", bizNo)
+		return plugin.TransferQueryResult{Code: -1, ErrMsg: "响应格式错误"}, nil
+	}
+
+	if code := stringifyAny(response["code"]); code != "10000" {
+		msg := stringifyAny(response["msg"])
+		subMsg := stringifyAny(response["sub_msg"])
+		errMsg := msg
+		if subMsg != "" {
+			errMsg = subMsg
+		}
+		log.Printf("[alipay_transfer_query_failed] biz_no=%s, reason=alipay error, code=%s, msg=%s", bizNo, code, errMsg)
+		return plugin.TransferQueryResult{Code: -1, ErrMsg: fmt.Sprintf("%s:%s", code, errMsg)}, nil
 	}
 
 	status := 0
-	switch response["status"].(string) {
+	statusStr, _ := response["status"].(string)
+	switch statusStr {
 	case "SUCCESS":
 		status = 1
 	case "FAIL":
 		status = 2
 	}
 
+	payDate, _ := response["pay_date"].(string)
+
 	return plugin.TransferQueryResult{
 		Code:    0,
 		Status:  status,
 		Amount:  0,
-		PayDate: response["pay_date"].(string),
+		PayDate: payDate,
 	}, nil
 }
 
@@ -1069,6 +1175,8 @@ func (p *AlipayPlugin) QueryOrder(params map[string]interface{}) (map[string]int
 		"out_trade_no": tradeNo,
 	}
 
+	bizContentStr, _ := json.Marshal(bizContent)
+
 	p2 := map[string]interface{}{
 		"app_id":      cfg.AppID,
 		"method":      "alipay.trade.query",
@@ -1077,7 +1185,7 @@ func (p *AlipayPlugin) QueryOrder(params map[string]interface{}) (map[string]int
 		"sign_type":   "RSA2",
 		"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
 		"version":     "1.0",
-		"biz_content": bizContent,
+		"biz_content": string(bizContentStr),
 	}
 
 	sign, err := p.signParams(p2, cfg.AppSecret)
@@ -1164,7 +1272,6 @@ func (p *AlipayPlugin) getOrder(tradeNo string) (*model.Order, error) {
 
 // 签名参数
 func (p *AlipayPlugin) signParams(params map[string]interface{}, privateKey string) (string, error) {
-	// 构建签名字符串
 	keys := make([]string, 0)
 	for k := range params {
 		keys = append(keys, k)
@@ -1182,7 +1289,11 @@ func (p *AlipayPlugin) signParams(params map[string]interface{}, privateKey stri
 		case string:
 			val = vt
 		default:
-			b, _ := json.Marshal(v)
+			b, err := json.Marshal(v)
+			if err != nil {
+				log.Printf("[alipay_sign_failed] reason=marshal param %s failed, error=%s", k, err.Error())
+				return "", fmt.Errorf("marshal param %s failed: %v", k, err)
+			}
 			val = string(b)
 		}
 		signData += k + "=" + val + "&"
@@ -1328,8 +1439,15 @@ func (p *AlipayPlugin) buildForm(params map[string]interface{}, gatewayURL strin
 func (p *AlipayPlugin) generateNonceStr(length int) string {
 	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 	result := make([]byte, length)
+	randBytes := make([]byte, length)
+	if _, err := rand.Read(randBytes); err != nil {
+		for i := range result {
+			result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+		}
+		return string(result)
+	}
 	for i := range result {
-		result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+		result[i] = chars[int(randBytes[i])%len(chars)]
 	}
 	return string(result)
 }

@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-gradient-to-br from-blue-600 via-sky-500 to-indigo-600 text-white">
-    <div class="mx-auto max-w-6xl px-6 py-14 md:py-20">
+    <div class="mx-auto max-w-4xl px-6 py-14 md:py-20">
       <div class="text-center">
         <img :src="logo" alt="彩虹易支付" class="mx-auto h-20 w-20 drop-shadow-lg" />
         <h1 class="mt-5 text-4xl md:text-5xl font-black tracking-wide">彩虹易支付</h1>
@@ -25,11 +25,11 @@
         </div>
       </div>
 
-      <div class="mt-10 mx-auto max-w-2xl rounded-2xl bg-white/95 text-gray-800 p-6 md:p-8 shadow-2xl">
+      <div class="mt-10 rounded-2xl bg-white/95 text-gray-800 p-6 md:p-8 shadow-2xl">
         <h2 class="text-2xl font-bold">开始使用</h2>
         <p class="mt-2 text-sm text-gray-500">请选择入口进入系统控制台或收银体验页。</p>
 
-        <div class="mt-6 grid gap-3 md:grid-cols-3">
+        <div class="mt-6 grid gap-3 grid-cols-3">
           <button
             class="rounded-xl bg-blue-600 text-white px-4 py-3 font-semibold hover:bg-blue-700 transition-colors"
             @click="go('/user/login')"
@@ -43,7 +43,7 @@
             管理后台
           </button>
           <button
-            class="rounded-xl border border-gray-200 px-4 py-3 font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            class="rounded-xl bg-indigo-500 text-white px-4 py-3 font-semibold hover:bg-indigo-600 transition-colors"
             @click="go('/cashier/user/1')"
           >
             收银体验
