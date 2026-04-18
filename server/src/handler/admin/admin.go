@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,29 @@ import (
 	"gorm.io/gorm"
 )
 
+func sanitizeUploadFilename(name string) string {
+	base := filepath.Base(strings.TrimSpace(name))
+	base = strings.ReplaceAll(base, "\\", "_")
+	base = strings.ReplaceAll(base, "/", "_")
+	if base == "" || base == "." || base == ".." {
+		return "upload.pem"
+	}
+
+	var b strings.Builder
+	for _, r := range base {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	safe := strings.Trim(b.String(), "._")
+	if safe == "" {
+		safe = "upload"
+	}
+	return safe
+}
+
 // 管理员Handler
 type AdminHandler struct {
 	authSvc     *service.AuthService
@@ -29,6 +53,18 @@ type AdminHandler struct {
 	settleSvc   *service.SettleService
 	transferSvc *service.TransferService
 	userSvc     *service.AuthService
+}
+
+func (h *AdminHandler) writeAdminActionLog(c *gin.Context, logType, data string) {
+	adminUser := strings.TrimSpace(fmt.Sprintf("%v", c.GetString("admin_user")))
+	uid := uint(0)
+	if adminUser != "" {
+		var admin model.User
+		if err := config.DB.Where("username = ?", adminUser).First(&admin).Error; err == nil {
+			uid = admin.UID
+		}
+	}
+	h.authSvc.AddLog(uid, logType, data, c.ClientIP())
 }
 
 func NewAdminHandler() *AdminHandler {
@@ -69,7 +105,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 
 	log.Printf("[admin_login_success] ip=%s, username=%s", ip, req.Username)
-	c.SetCookie("admin_token", token, 86400*30, "/", "", false, true)
+	c.SetCookie("admin_token", token, 86400*24, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "登录成功", "token": token})
 }
 
@@ -349,7 +385,7 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 		// 生成新token并返回给前端
 		newToken := h.authSvc.GenAdminToken()
 		// 同时设置cookie
-		c.SetCookie("admin_token", newToken, 86400*30, "/", "", false, true)
+		c.SetCookie("admin_token", newToken, 86400*24, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功", "token": newToken})
 		return
 	}
@@ -838,6 +874,7 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 		IsBuiltIn  bool                          `json:"is_builtin"`
 		Select     map[string]string             `json:"select"` // 支付方式选择
 		Inputs     map[string]plugin.InputConfig `json:"inputs"` // 配置字段定义
+		Testable   bool                          `json:"testable"`
 	}
 
 	result := make([]PluginResponse, 0, len(builtInPlugins))
@@ -845,6 +882,12 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 		dbPlugin, exists := dbPluginMap[p.Name]
 		status := 1 // 默认启用
 		cfg := "{}"
+		testable := false
+		if handler := plugin.GetHandler(p.Name); handler != nil {
+			_, testable = handler.(interface {
+				TestConfig(config string) (bool, string)
+			})
+		}
 		if exists {
 			status = dbPlugin.Status
 			if dbPlugin.Config != "" {
@@ -864,6 +907,7 @@ func (h *AdminHandler) AjaxPluginList(c *gin.Context) {
 			IsBuiltIn:  true,
 			Select:     p.Select,
 			Inputs:     p.Inputs,
+			Testable:   testable,
 		})
 	}
 
@@ -949,8 +993,8 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "data": dbPlugin})
 		return
 
-	case "save_config":
-		cfg := req.Config
+		case "save_config":
+			cfg := req.Config
 		if cfg == "" {
 			cfg = "{}"
 		}
@@ -973,14 +1017,15 @@ func (h *AdminHandler) AjaxPluginOp(c *gin.Context) {
 			}
 		}
 
-		result := config.DB.Model(&model.Plugin{}).Where("name = ?", req.Name).Update("config", cfg)
-		if result.Error != nil {
-			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
+			result := config.DB.Model(&model.Plugin{}).Where("name = ?", req.Name).Update("config", cfg)
+			if result.Error != nil {
+				c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "保存失败"})
+				return
+			}
+			log.Printf("[plugin_save_config] name=%s", req.Name)
+			h.writeAdminActionLog(c, "plugin_save_config", fmt.Sprintf("name=%s", req.Name))
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "配置已保存"})
 			return
-		}
-		log.Printf("[plugin_save_config] name=%s", req.Name)
-		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "配置已保存"})
-		return
 
 	case "test_config":
 		p := plugin.GetHandler(req.Name)
@@ -2181,6 +2226,7 @@ func (h *AdminHandler) AjaxSSOLogin(c *gin.Context) {
 	token := h.authSvc.GenUserToken(user.UID, user.Key)
 
 	log.Printf("[sso_login_success] uid=%d", req.UID)
+	h.writeAdminActionLog(c, "sso_login", fmt.Sprintf("target_uid=%d", req.UID))
 	h.saveSSORecent(user)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -2802,7 +2848,8 @@ func (h *AdminHandler) UploadCert(c *gin.Context) {
 	}
 
 	// 生成唯一文件名
-	filename := fmt.Sprintf("cert_%d_%s", time.Now().UnixNano(), file.Filename)
+	safeName := sanitizeUploadFilename(file.Filename)
+	filename := fmt.Sprintf("cert_%d_%s", time.Now().UnixNano(), safeName)
 	uploadPath := fmt.Sprintf("certs/%s", filename)
 
 	// 确保目录存在

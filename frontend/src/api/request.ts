@@ -47,13 +47,13 @@ const axiosInstance: AxiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     // 添加admin token
-    const adminToken = localStorage.getItem('admin_token')
+    const adminToken = sessionStorage.getItem('admin_token')
     if (adminToken) {
       config.headers['Admin-Token'] = adminToken
     }
 
     // 添加user token
-    const userToken = localStorage.getItem('user_token')
+    const userToken = sessionStorage.getItem('user_token')
     if (userToken) {
       config.headers['User-Token'] = userToken
     }
@@ -84,10 +84,10 @@ axiosInstance.interceptors.response.use(
       if (!isLoginPage) {
         const isAdminRoute = url.includes('/admin/')
         if (isAdminRoute) {
-          localStorage.removeItem('admin_token')
+          sessionStorage.removeItem('admin_token')
           router.push('/admin/login')
         } else {
-          localStorage.removeItem('user_token')
+          sessionStorage.removeItem('user_token')
           router.push('/user/login')
         }
         return Promise.reject(new Error('登录已过期'))

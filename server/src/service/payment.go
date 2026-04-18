@@ -16,6 +16,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var errOrderAlreadyProcessed = errors.New("订单不存在或已处理")
+
 type PaymentService struct {
 	orderSvc *OrderService
 	authSvc  *AuthService
@@ -39,6 +41,7 @@ type SubmitParams struct {
 	NotifyURL  string
 	ReturnURL  string
 	Param      string
+	Openid     string
 	IP         string
 	Device     string // pc/mobile
 	Method     string // web/jump/jsapi/scan
@@ -510,6 +513,7 @@ func (s *PaymentService) SubmitPayment(params SubmitParams) (map[string]interfac
 		"notify_url":   params.NotifyURL,
 		"return_url":   params.ReturnURL,
 		"param":        params.Param,
+		"openid":       strings.TrimSpace(params.Openid),
 		"ip":           params.IP,
 		"device":       params.Device,
 		"method":       method,
@@ -652,6 +656,13 @@ func (s *PaymentService) HandleNotify(tradeNo string, pluginName string, c *gin.
 		// 更新订单状态
 		err = s.orderSvc.OrderPaid(result.TradeNo, result.APITradeNo, result.Buyer)
 		if err != nil {
+			// 回调可能重复推送，若订单已处理则按幂等成功响应，避免微信持续重试。
+			if strings.Contains(err.Error(), errOrderAlreadyProcessed.Error()) {
+				return map[string]interface{}{
+					"success": true,
+					"message": "already processed",
+				}, nil
+			}
 			log.Printf("[handle_notify_failed] trade_no=%s, plugin=%s, reason=order paid update failed, error=%s", tradeNo, pluginName, err.Error())
 			return nil, err
 		}

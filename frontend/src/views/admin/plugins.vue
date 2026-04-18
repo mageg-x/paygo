@@ -5,12 +5,12 @@
         <h1 class="page-title no-wrap">插件管理</h1>
         <p class="page-subtitle">管理支付插件和配置</p>
       </div>
-      <button @click="handleRefresh" class="btn btn-outline">
+      <button @click="handleRefresh" class="btn btn-outline" :disabled="refreshing">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
-        刷新插件
+        {{ refreshing ? '刷新中...' : '刷新插件' }}
       </button>
     </div>
 
@@ -85,7 +85,7 @@
               d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
           </svg>
           <h3 class="text-lg font-medium text-gray-900 mb-1">暂无插件</h3>
-          <p class="text-gray-500">请刷新或联系管理员安装插件</p>
+          <p class="text-gray-500">未检测到插件，请先点击“刷新插件”扫描内置插件</p>
         </div>
       </div>
     </div>
@@ -166,8 +166,9 @@
                   <input
                     v-else
                     v-model="pluginForm[field.key]"
-                    type="text"
+                    :type="isSensitiveField(field.key) ? 'password' : 'text'"
                     class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    autocomplete="off"
                   />
 
                   <div v-if="field.input?.note" class="text-xs text-gray-500">
@@ -182,7 +183,7 @@
 
             <div v-if="currentPlugin?.note" class="section-card text-sm">
               <div class="font-medium text-blue-700 mb-2">配置说明</div>
-              <div class="text-blue-600 prose prose-sm max-w-none" v-html="currentPlugin.note"></div>
+              <div class="text-blue-600 text-sm whitespace-pre-wrap break-words">{{ currentPlugin.note }}</div>
             </div>
 
             <div v-if="currentPlugin?.inputs && Object.keys(currentPlugin.inputs).length > 0" class="section-card">
@@ -208,7 +209,7 @@
 
           <div class="dialog-footer justify-between">
             <button @click="showConfigModal = false" class="btn !h-9 btn-outline">关闭</button>
-            <button v-if="currentPlugin?.name === 'alipay' || currentPlugin?.name === 'wxpay'"
+            <button v-if="currentPlugin?.testable"
               @click="testPluginConfig" class="btn !h-9 btn-success flex items-center gap-2">
               <TestIcon class="w-4 h-4" />
               测试配置
@@ -225,7 +226,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
 import { getPluginList, pluginOp } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
 import { Beaker } from 'lucide-vue-next'
 
@@ -234,6 +235,7 @@ const showConfigModal = ref(false)
 const currentPlugin = ref<any>(null)
 const pluginForm = ref<Record<string, string>>({})
 const extraConfig = ref<Record<string, any>>({})
+const refreshing = ref(false)
 const TestIcon = Beaker
 
 const currentPluginInputs = computed(() => {
@@ -259,12 +261,16 @@ async function fetchPlugins() {
 }
 
 async function handleRefresh() {
+  if (refreshing.value) return
+  refreshing.value = true
   try {
     const res = await pluginOp({ action: 'refresh' })
     ElMessage.success(res.msg || '刷新成功')
-    fetchPlugins()
+    await fetchPlugins()
   } catch (error) {
     console.error('刷新失败:', error)
+  } finally {
+    refreshing.value = false
   }
 }
 
@@ -326,6 +332,18 @@ function buildPluginConfigString(): string {
     nextConfig[k] = text
   }
   return JSON.stringify(nextConfig)
+}
+
+function isSensitiveField(key: string): boolean {
+  const k = String(key || '').toLowerCase()
+  if (!k) return false
+  return (
+    k.includes('key') ||
+    k.includes('secret') ||
+    k.includes('pwd') ||
+    k.includes('password') ||
+    k.includes('token')
+  )
 }
 
 function decodePemToDer(pem: string): Uint8Array | null {
@@ -452,6 +470,15 @@ async function testPluginConfig() {
 async function savePluginConfig() {
   if (!currentPlugin.value) return
   try {
+    await ElMessageBox.confirm(
+      `即将保存插件【${currentPlugin.value.showname || currentPlugin.value.name}】配置，确认继续？`,
+      '确认保存',
+      {
+        type: 'warning',
+        confirmButtonText: '确认保存',
+        cancelButtonText: '取消'
+      }
+    )
     const config = buildPluginConfigString()
     const res = await pluginOp({
       action: 'save_config',

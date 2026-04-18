@@ -14,8 +14,8 @@ export interface User {
 // 管理器状态
 export const useAppStore = defineStore('app', () => {
   // 状态
-  const adminToken = ref<string>(localStorage.getItem('admin_token') || '')
-  const userToken = ref<string>(localStorage.getItem('user_token') || '')
+  const adminToken = ref<string>(sessionStorage.getItem('admin_token') || '')
+  const userToken = ref<string>(sessionStorage.getItem('user_token') || '')
   const adminUser = ref<string>('')
   const userInfo = ref<User | null>(null)
   const configs = ref<Record<string, string>>({})
@@ -28,28 +28,28 @@ export const useAppStore = defineStore('app', () => {
   function adminLogin(token: string, username: string) {
     adminToken.value = token
     adminUser.value = username
-    localStorage.setItem('admin_token', token)
+    sessionStorage.setItem('admin_token', token)
   }
 
   // 管理器登出
   function adminLogout() {
     adminToken.value = ''
     adminUser.value = ''
-    localStorage.removeItem('admin_token')
+    sessionStorage.removeItem('admin_token')
   }
 
   // 商户登录
   function userLogin(token: string, info: User) {
     userToken.value = token
     userInfo.value = info
-    localStorage.setItem('user_token', token)
+    sessionStorage.setItem('user_token', token)
   }
 
   // 商户登出
   function userLogout() {
     userToken.value = ''
     userInfo.value = null
-    localStorage.removeItem('user_token')
+    sessionStorage.removeItem('user_token')
   }
 
   // 设置配置

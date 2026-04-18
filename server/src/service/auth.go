@@ -58,18 +58,13 @@ func (s *AuthService) AdminLogin(username, password string) (string, error) {
 		log.Printf("[admin_password_migrated] username=%s", username)
 	}
 
-	token := s.genAdminToken(username, cfg.AdminPwd)
+	token := middleware.GenerateAdminToken(username, cfg.AdminPwd, config.AppConfig.SysKey)
 	return token, nil
-}
-
-func (s *AuthService) genAdminToken(username, password string) string {
-	hash := md5.Sum([]byte(username + password + password + config.AppConfig.SysKey))
-	return hex.EncodeToString(hash[:])
 }
 
 func (s *AuthService) GenAdminToken() string {
 	cfg := config.AppConfig
-	return s.genAdminToken(cfg.AdminUser, cfg.AdminPwd)
+	return middleware.GenerateAdminToken(cfg.AdminUser, cfg.AdminPwd, cfg.SysKey)
 }
 
 func isBcryptHash(v string) bool {

@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"paygo/src/model"
 
@@ -24,12 +26,51 @@ var AppConfig *Config
 var DB *gorm.DB
 
 func LoadConfig(dbPath, port string) {
+	resolvedDBPath := strings.TrimSpace(dbPath)
+	if resolvedDBPath == "" {
+		resolvedDBPath = DefaultDBPath()
+	} else if absPath, err := filepath.Abs(resolvedDBPath); err == nil {
+		resolvedDBPath = absPath
+	}
+
 	AppConfig = &Config{
-		DBPath:    dbPath,
+		DBPath:    resolvedDBPath,
 		Port:      port,
 		AdminUser: "admin",
 		AdminPwd:  "12345678",
 		SysKey:    "paygosyskey2024",
+	}
+}
+
+// DefaultDBPath 返回各平台默认数据库路径：
+// Windows: %APPDATA%\paygo\paygo.db
+// macOS: ~/Library/Application Support/paygo/paygo.db
+// Linux: ~/.paygo/paygo.db
+func DefaultDBPath() string {
+	switch runtime.GOOS {
+	case "windows":
+		base := strings.TrimSpace(os.Getenv("APPDATA"))
+		if base == "" {
+			if cfgDir, err := os.UserConfigDir(); err == nil {
+				base = cfgDir
+			}
+		}
+		if base == "" {
+			base = "."
+		}
+		return filepath.Join(base, "paygo", "paygo.db")
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil || strings.TrimSpace(home) == "" {
+			return filepath.Join(".", "paygo.db")
+		}
+		return filepath.Join(home, "Library", "Application Support", "paygo", "paygo.db")
+	default:
+		home, err := os.UserHomeDir()
+		if err != nil || strings.TrimSpace(home) == "" {
+			return filepath.Join(".", "paygo.db")
+		}
+		return filepath.Join(home, ".paygo", "paygo.db")
 	}
 }
 

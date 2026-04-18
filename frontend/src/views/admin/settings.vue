@@ -898,7 +898,7 @@ async function handlePasswordChange() {
       passwordForm.new_pwd = ''
       passwordForm.confirm_pwd = ''
       if (res.token) {
-        localStorage.setItem('admin_token', res.token)
+        sessionStorage.setItem('admin_token', res.token)
       }
     } else {
       ElMessage.error(res.msg || '密码修改失败')

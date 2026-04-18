@@ -33,6 +33,7 @@ type SubmitRequest struct {
 	NotifyURL  string  `json:"notify_url"`
 	ReturnURL  string  `json:"return_url"`
 	Param      string  `json:"param"`
+	Openid     string  `json:"openid"`
 	Device     string  `json:"device"`
 	Sign       string  `json:"sign"`
 	SignType   string  `json:"sign_type"`
@@ -152,6 +153,7 @@ func (h *PayHandler) Submit(c *gin.Context) {
 		NotifyURL:  payStringParam(c, "notify_url"),
 		ReturnURL:  payStringParam(c, "return_url"),
 		Param:      payStringParam(c, "param"),
+		Openid:     payStringParam(c, "openid"),
 		Device:     strings.TrimSpace(payStringParam(c, "device")),
 		Sign:       payStringParam(c, "sign"),
 		SignType:   payStringParam(c, "sign_type"),
@@ -174,6 +176,7 @@ func (h *PayHandler) Submit(c *gin.Context) {
 		"money":        formatSignAmount(req.Money),
 		"notify_url":   req.NotifyURL,
 		"return_url":   req.ReturnURL,
+		"openid":       req.Openid,
 		"device":       req.Device,
 		"param":        req.Param,
 	}
@@ -206,6 +209,7 @@ func (h *PayHandler) Submit(c *gin.Context) {
 		NotifyURL:  req.NotifyURL,
 		ReturnURL:  req.ReturnURL,
 		Param:      req.Param,
+		Openid:     req.Openid,
 		IP:         ip,
 		Device:     req.Device,
 	}
@@ -237,6 +241,7 @@ func (h *PayHandler) CashierSubmit(c *gin.Context) {
 		NotifyURL:  payStringParam(c, "notify_url"),
 		ReturnURL:  payStringParam(c, "return_url"),
 		Param:      payStringParam(c, "param"),
+		Openid:     payStringParam(c, "openid"),
 		Device:     strings.TrimSpace(payStringParam(c, "device")),
 	}
 	if money, err := strconv.ParseFloat(payStringParam(c, "money"), 64); err == nil {
@@ -263,6 +268,7 @@ func (h *PayHandler) CashierSubmit(c *gin.Context) {
 		NotifyURL:  req.NotifyURL,
 		ReturnURL:  req.ReturnURL,
 		Param:      req.Param,
+		Openid:     req.Openid,
 		IP:         ip,
 		Device:     req.Device,
 	}
@@ -294,6 +300,7 @@ func (h *PayHandler) Create(c *gin.Context) {
 		ReturnURL  string  `json:"return_url"`
 		ClientIP   string  `json:"clientip"`
 		Device     string  `json:"device"`
+		Openid     string  `json:"openid"`
 		Param      string  `json:"param"`
 		Sign       string  `json:"sign"`
 		SignType   string  `json:"sign_type"`
@@ -319,6 +326,7 @@ func (h *PayHandler) Create(c *gin.Context) {
 		"notify_url":   req.NotifyURL,
 		"return_url":   req.ReturnURL,
 		"clientip":     req.ClientIP,
+		"openid":       req.Openid,
 		"device":       req.Device,
 		"param":        req.Param,
 	}
@@ -354,6 +362,7 @@ func (h *PayHandler) Create(c *gin.Context) {
 		NotifyURL:  req.NotifyURL,
 		ReturnURL:  req.ReturnURL,
 		Param:      req.Param,
+		Openid:     req.Openid,
 		IP:         clientIP,
 		Device:     device,
 	}

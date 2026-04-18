@@ -116,6 +116,7 @@ func (p *WxpayPlugin) GetInfo() plugin.PluginInfo {
 			"appkey":        {Name: "APIv3密钥", Type: "input"},
 			"private_key":   {Name: "商户私钥内容(PEM)", Type: "textarea", Note: "必填，直接粘贴"},
 			"merchant_cert": {Name: "商户证书内容(PEM)", Type: "textarea", Note: "建议填写，可自动解析 serial_no"},
+			"platform_cert": {Name: "微信支付平台证书内容(PEM)", Type: "textarea", Note: "必填，用于异步回调验签（支持粘贴多段证书PEM）"},
 			"serial_no":     {Name: "商户证书序列号", Type: "input", Note: "可选；不填将从 merchant_cert 自动计算"},
 		},
 		Select: map[string]string{
@@ -134,10 +135,11 @@ func (p *WxpayPlugin) GetInfo() plugin.PluginInfo {
 	  "appkey": "your_api_v3_key_here",
 	  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
 	  "merchant_cert": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
-	  "serial_no": ""
-	}
-</pre>
-<p class="text-xs text-gray-500 mt-2">* serial_no 支持自动解析（优先从 merchant_cert）<br>* 旧版 cert_path/key_path 仍兼容读取，但不再推荐</p>`,
+	  "serial_no": "",
+	  "platform_cert": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+		}
+	</pre>
+	<p class="text-xs text-gray-500 mt-2">* serial_no 支持自动解析（优先从 merchant_cert）<br>* 回调验签必须配置 platform_cert（可粘贴多段证书）<br>* 旧版 cert_path/key_path/platform_cert_path 仍兼容读取，但不再推荐</p>`,
 	}
 }
 
@@ -414,7 +416,7 @@ func (p *WxpayPlugin) submitJSAPI(params map[string]interface{}, channel model.C
 	money := params["money"].(float64)
 	name := params["name"].(string)
 	notifyURL := params["notify_url"].(string)
-	openid := params["openid"].(string)
+	openid, _ := params["openid"].(string)
 
 	if openid == "" {
 		log.Printf("[wxpay_submit_jsapi_failed] trade_no=%s, reason=openid is empty")
@@ -452,7 +454,8 @@ func (p *WxpayPlugin) submitJSAPI(params map[string]interface{}, channel model.C
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	nonceStr := p.generateNonceStr(32)
 
-	signStr := fmt.Sprintf("%s\n%s\n%s\n%s\n", cfg.AppID, timestamp, nonceStr, prepayId)
+	// JSAPI/小程序调起签名第4行必须是 package 值: prepay_id=xxx
+	signStr := fmt.Sprintf("%s\n%s\n%s\nprepay_id=%s\n", cfg.AppID, timestamp, nonceStr, prepayId)
 	privateKey, _ := p.resolvePrivateKey(cfg)
 	signature, _ := p.sign(signStr, privateKey)
 
@@ -638,12 +641,17 @@ func (p *WxpayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResul
 	wxTimestamp := c.GetHeader("Wechatpay-Timestamp")
 	wxNonce := c.GetHeader("Wechatpay-Nonce")
 	wxSignature := c.GetHeader("Wechatpay-Signature")
-	if wxTimestamp == "" || wxNonce == "" || wxSignature == "" {
+	wxSerial := c.GetHeader("Wechatpay-Serial")
+	if wxTimestamp == "" || wxNonce == "" || wxSignature == "" || wxSerial == "" {
 		err := fmt.Errorf("missing wechatpay signature headers")
 		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=missing wechatpay headers", tradeNo)
 		return plugin.NotifyResult{Success: false, Message: "missing wechatpay signature headers"}, err
 	}
-	if err := p.verifyNotifySignature(wxTimestamp, wxNonce, string(body), wxSignature, cfg); err != nil {
+	if err := p.verifyNotifyTimestamp(wxTimestamp); err != nil {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=invalid timestamp, error=%s", tradeNo, err.Error())
+		return plugin.NotifyResult{Success: false, Message: "invalid wechatpay timestamp"}, err
+	}
+	if err := p.verifyNotifySignature(wxTimestamp, wxNonce, string(body), wxSignature, wxSerial, cfg); err != nil {
 		log.Printf("[wxpay_notify_failed] trade_no=%s, reason=signature verification failed, error=%s", tradeNo, err.Error())
 		return plugin.NotifyResult{Success: false, Message: "signature verification failed"}, err
 	}
@@ -693,8 +701,8 @@ func (p *WxpayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResul
 		return plugin.NotifyResult{Success: false, Message: "trade no mismatch"}, nil
 	}
 
-	if float64(result.Amount.Total)/100 != order.Realmoney {
-		log.Printf("[wxpay_notify_failed] trade_no=%s, expected=%.2f, got=%.2f, reason=amount mismatch", tradeNo, order.Realmoney, float64(result.Amount.Total)/100)
+	if float64(result.Amount.Total)/100 != order.Money {
+		log.Printf("[wxpay_notify_failed] trade_no=%s, expected=%.2f, got=%.2f, reason=amount mismatch", tradeNo, order.Money, float64(result.Amount.Total)/100)
 		return plugin.NotifyResult{Success: false, Message: "amount mismatch"}, nil
 	}
 
@@ -714,21 +722,16 @@ func (p *WxpayPlugin) Notify(tradeNo string, c *gin.Context) (plugin.NotifyResul
 	return plugin.NotifyResult{Success: false, Message: result.TradeStateDesc}, nil
 }
 
-func (p *WxpayPlugin) verifyNotifySignature(timestamp, nonce, body, signature string, cfg *WxpayConfig) error {
+func (p *WxpayPlugin) verifyNotifySignature(timestamp, nonce, body, signature, serial string, cfg *WxpayConfig) error {
 	message := fmt.Sprintf("%s\n%s\n%s\n", timestamp, nonce, body)
 
 	platformCert, err := p.resolvePlatformCert(cfg)
 	if err != nil {
 		return fmt.Errorf("get platform cert failed: %v", err)
 	}
-
-	block, _ := pem.Decode([]byte(platformCert))
-	if block == nil {
-		return fmt.Errorf("invalid platform cert PEM")
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
+	pubKey, err := p.pickPlatformPublicKeyBySerial(platformCert, serial)
 	if err != nil {
-		return fmt.Errorf("parse platform cert failed: %v", err)
+		return err
 	}
 
 	sigBytes, err := base64.StdEncoding.DecodeString(signature)
@@ -740,10 +743,63 @@ func (p *WxpayPlugin) verifyNotifySignature(timestamp, nonce, body, signature st
 	h.Write([]byte(message))
 	hashed := h.Sum(nil)
 
-	if err := rsa.VerifyPKCS1v15(cert.PublicKey.(*rsa.PublicKey), crypto.SHA256, hashed, sigBytes); err != nil {
+	if err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hashed, sigBytes); err != nil {
 		return fmt.Errorf("signature verification failed: %v", err)
 	}
 	return nil
+}
+
+func (p *WxpayPlugin) verifyNotifyTimestamp(ts string) error {
+	ts = strings.TrimSpace(ts)
+	if ts == "" {
+		return fmt.Errorf("empty timestamp")
+	}
+	got, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp format")
+	}
+	now := time.Now().Unix()
+	if got <= 0 {
+		return fmt.Errorf("invalid timestamp value")
+	}
+	// 微信支付回调验签推荐校验时间戳新鲜度，避免重放攻击。
+	if now-got > 300 || got-now > 300 {
+		return fmt.Errorf("timestamp expired")
+	}
+	return nil
+}
+
+func (p *WxpayPlugin) pickPlatformPublicKeyBySerial(certPEM, serial string) (*rsa.PublicKey, error) {
+	serial = normalizeSerialNo(serial)
+	if serial == "" {
+		return nil, fmt.Errorf("empty wechatpay serial")
+	}
+
+	rest := []byte(certPEM)
+	for len(rest) > 0 {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			continue
+		}
+		certSerial := normalizeSerialNo(strings.ToUpper(hex.EncodeToString(cert.SerialNumber.Bytes())))
+		if certSerial != serial {
+			continue
+		}
+		pubKey, ok := cert.PublicKey.(*rsa.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("platform cert public key is not RSA")
+		}
+		return pubKey, nil
+	}
+	return nil, fmt.Errorf("platform cert serial mismatch: serial=%s", serial)
 }
 
 func (p *WxpayPlugin) resolvePlatformCert(cfg *WxpayConfig) (string, error) {
@@ -839,7 +895,7 @@ func (p *WxpayPlugin) Refund(params map[string]interface{}) (plugin.RefundResult
 		"out_refund_no":  fmt.Sprintf("R%s", tradeNo),
 		"amount": map[string]interface{}{
 			"refund":   int(money * 100),
-			"total":    int(order.Realmoney * 100),
+			"total":    int(order.Money * 100),
 			"currency": "CNY",
 		},
 	}
@@ -1114,6 +1170,10 @@ func (p *WxpayPlugin) TestConfig(config string) (bool, string) {
 	if err != nil {
 		log.Printf("[wxpay_test_config_failed] reason=resolve serial_no failed, error=%s", err.Error())
 		return false, "缺少商户证书序列号(serial_no)，请填写或提供merchant_cert自动解析"
+	}
+	if _, err := p.resolvePlatformCert(&cfg); err != nil {
+		log.Printf("[wxpay_test_config_failed] reason=missing platform cert, error=%s", err.Error())
+		return false, "缺少微信支付平台证书(platform_cert)，无法验证回调签名"
 	}
 
 	// 测试签名

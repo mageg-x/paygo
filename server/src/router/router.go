@@ -1,7 +1,10 @@
 package router
 
 import (
+	"net/http"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"paygo/src/handler/admin"
 	"paygo/src/handler/api"
@@ -40,9 +43,20 @@ func SetupRouter() *gin.Engine {
 		static.ServeFile(c.Writer, c.Request, fs, "assets/"+path)
 	})
 	r.GET("/uploads/*path", func(c *gin.Context) {
-		path := c.Param("path")
-		path = strings.TrimPrefix(path, "/")
-		c.File("uploads/" + path)
+		rawPath := strings.TrimPrefix(c.Param("path"), "/")
+		cleanRel := strings.TrimPrefix(filepath.Clean(rawPath), string(filepath.Separator))
+		if cleanRel == "." || cleanRel == "" || strings.HasPrefix(cleanRel, "..") {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "无效文件路径"})
+			return
+		}
+		fullPath := filepath.Join("uploads", cleanRel)
+		base := filepath.Clean("uploads") + string(filepath.Separator)
+		fullClean := filepath.Clean(fullPath)
+		if fullClean != filepath.Clean("uploads") && !strings.HasPrefix(fullClean, base) {
+			c.JSON(http.StatusForbidden, gin.H{"code": 1, "msg": "无权访问该文件"})
+			return
+		}
+		c.File(fullClean)
 	})
 
 	// ========== JSON API 全部在 /api/* ==========
@@ -54,19 +68,19 @@ func SetupRouter() *gin.Engine {
 	api := r.Group("/api")
 	{
 		// 支付接口（公开）
-		api.POST("/pay/submit", apiHandler.Submit)
-		api.POST("/pay/cashier_submit", apiHandler.CashierSubmit)
-		api.POST("/pay/create", apiHandler.Create)
-		api.GET("/pay/query", apiHandler.Query)
-		api.POST("/pay/query", apiHandler.Query)
-		api.POST("/pay/refund", apiHandler.Refund)
+		api.POST("/pay/submit", middleware.IPRateLimit(40, time.Minute), apiHandler.Submit)
+		api.POST("/pay/cashier_submit", middleware.IPRateLimit(50, time.Minute), apiHandler.CashierSubmit)
+		api.POST("/pay/create", middleware.IPRateLimit(40, time.Minute), apiHandler.Create)
+		api.GET("/pay/query", middleware.IPRateLimit(120, time.Minute), apiHandler.Query)
+		api.POST("/pay/query", middleware.IPRateLimit(120, time.Minute), apiHandler.Query)
+		api.POST("/pay/refund", middleware.IPRateLimit(20, time.Minute), apiHandler.Refund)
 		api.POST("/pay/notify/:trade_no", apiHandler.Notify)
 		api.GET("/pay/return/:trade_no", apiHandler.Return)
 		api.GET("/pay/types", apiHandler.GetTypes)
 		api.GET("/pay/channels", apiHandler.GetChannels)
 
 		// 管理后台 API - 公开
-		api.POST("/admin/login", adminHandler.Login)
+		api.POST("/admin/login", middleware.IPRateLimit(10, time.Minute), adminHandler.Login)
 
 		// 管理后台 API - 需要认证
 		adminAuth := api.Group("/admin")
@@ -153,11 +167,11 @@ func SetupRouter() *gin.Engine {
 		}
 
 		// 商户后台 API - 公开
-		api.POST("/user/login", userHandler.Login)
-		api.POST("/user/reg", userHandler.Register)
-		api.POST("/user/reg/send", userHandler.RegSendCode)
-		api.POST("/user/findpwd/send", userHandler.FindPwdSendCode)
-		api.POST("/user/findpwd/reset", userHandler.FindPwdReset)
+		api.POST("/user/login", middleware.IPRateLimit(12, time.Minute), userHandler.Login)
+		api.POST("/user/reg", middleware.IPRateLimit(8, time.Minute), userHandler.Register)
+		api.POST("/user/reg/send", middleware.IPRateLimit(6, time.Minute), userHandler.RegSendCode)
+		api.POST("/user/findpwd/send", middleware.IPRateLimit(6, time.Minute), userHandler.FindPwdSendCode)
+		api.POST("/user/findpwd/reset", middleware.IPRateLimit(10, time.Minute), userHandler.FindPwdReset)
 
 		// 商户后台 API - 需要认证
 		userAuth := api.Group("/user")

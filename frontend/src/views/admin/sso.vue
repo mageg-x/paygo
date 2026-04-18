@@ -106,9 +106,9 @@ async function quickLogin(uidVal: number) {
   try {
     const res = await ssoLogin({ uid: uidVal })
     if (res.code === 0) {
-      // 保存到localStorage
-      localStorage.setItem('user_token', res.token)
-      localStorage.setItem('user_uid', res.uid)
+      // 保存到sessionStorage
+      sessionStorage.setItem('user_token', res.token)
+      sessionStorage.setItem('user_uid', res.uid)
       // 跳转到商户后台
       window.open('/user/index', '_blank')
       // 刷新最近登录

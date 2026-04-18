@@ -2,22 +2,32 @@ package middleware
 
 import (
 	"crypto/hmac"
-	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"paygo/src/config"
 	"paygo/src/model"
 
 	"github.com/gin-gonic/gin"
+)
+
+type ipRateBucket struct {
+	windowStart int64
+	count       int
+}
+
+var (
+	ipRateMu      sync.Mutex
+	ipRateBuckets = make(map[string]*ipRateBucket)
+	ipRateLastGC  int64
 )
 
 // Logger 日志中间件
@@ -40,19 +50,89 @@ func Logger() gin.HandlerFunc {
 // CORS 跨域中间件
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		allowOrigin := ""
+		if origin != "" && isAllowedCORSOrigin(origin, c.Request.Host) {
+			allowOrigin = origin
+		}
+
+		if allowOrigin != "" {
+			c.Header("Access-Control-Allow-Origin", allowOrigin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Vary", "Origin")
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, Accept, X-Requested-With")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type")
-		c.Header("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == "OPTIONS" {
+			if origin != "" && allowOrigin == "" {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
 		c.Next()
 	}
+}
+
+func normalizeOrigin(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u == nil {
+		return ""
+	}
+	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+	host := strings.TrimSpace(u.Host)
+	if host == "" {
+		return ""
+	}
+	return scheme + "://" + strings.ToLower(host)
+}
+
+func isAllowedCORSOrigin(origin string, reqHost string) bool {
+	normalizedOrigin := normalizeOrigin(origin)
+	if normalizedOrigin == "" {
+		return false
+	}
+	originURL, err := url.Parse(normalizedOrigin)
+	if err != nil || originURL == nil {
+		return false
+	}
+
+	originHost := strings.ToLower(strings.TrimSpace(originURL.Host))
+	requestHost := strings.ToLower(strings.TrimSpace(reqHost))
+	if requestHost != "" && originHost == requestHost {
+		return true
+	}
+
+	originHostname := strings.ToLower(strings.TrimSpace(originURL.Hostname()))
+	reqHostname := normalizeHost(reqHost)
+	if isLoopbackHost(originHostname) && isLoopbackHost(reqHostname) {
+		return true
+	}
+
+	// 允许配置白名单，逗号分隔，示例：
+	// cors_allow_origins=https://a.example.com,http://localhost:3000
+	allowList := strings.TrimSpace(config.Get("cors_allow_origins"))
+	if allowList == "" {
+		return false
+	}
+	for _, item := range strings.Split(allowList, ",") {
+		candidate := normalizeOrigin(item)
+		if candidate != "" && strings.EqualFold(candidate, normalizedOrigin) {
+			return true
+		}
+	}
+	return false
 }
 
 // Recover 异常恢复中间件
@@ -69,6 +149,69 @@ func Recover() gin.HandlerFunc {
 			}
 		}()
 		c.Next()
+	}
+}
+
+// IPRateLimit 基于客户端IP+路由的固定窗口限流。
+func IPRateLimit(limit int, window time.Duration) gin.HandlerFunc {
+	if limit <= 0 {
+		limit = 60
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	windowSec := int64(window.Seconds())
+	if windowSec <= 0 {
+		windowSec = 60
+	}
+
+	return func(c *gin.Context) {
+		route := strings.TrimSpace(c.FullPath())
+		if route == "" {
+			route = strings.TrimSpace(c.Request.URL.Path)
+		}
+		key := c.ClientIP() + "|" + c.Request.Method + "|" + route
+		now := time.Now().Unix()
+
+		ipRateMu.Lock()
+		if shouldRateLimit(key, now, windowSec, limit) {
+			ipRateMu.Unlock()
+			c.JSON(http.StatusTooManyRequests, gin.H{"code": 1, "msg": "请求过于频繁，请稍后重试"})
+			c.Abort()
+			return
+		}
+		maybeCleanupRateBuckets(now, windowSec)
+		ipRateMu.Unlock()
+
+		c.Next()
+	}
+}
+
+func shouldRateLimit(key string, now int64, windowSec int64, limit int) bool {
+	b, ok := ipRateBuckets[key]
+	if !ok {
+		ipRateBuckets[key] = &ipRateBucket{windowStart: now, count: 1}
+		return false
+	}
+	if now-b.windowStart >= windowSec {
+		b.windowStart = now
+		b.count = 1
+		return false
+	}
+	b.count++
+	return b.count > limit
+}
+
+func maybeCleanupRateBuckets(now int64, windowSec int64) {
+	if now-ipRateLastGC < 120 {
+		return
+	}
+	ipRateLastGC = now
+	expireBefore := now - windowSec*2
+	for k, b := range ipRateBuckets {
+		if b == nil || b.windowStart < expireBefore {
+			delete(ipRateBuckets, k)
+		}
 	}
 }
 
@@ -161,36 +304,62 @@ func AdminAuth() gin.HandlerFunc {
 			token = cookie
 		}
 
-		// 验证token：重新生成token比较
-		cfg := config.AppConfig
-		expectedToken := generateAdminToken(cfg.AdminUser, cfg.AdminPwd, cfg.SysKey)
-
-		if token != expectedToken {
+		if !IsValidAdminToken(token) {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "登录已过期"})
 			c.Abort()
 			return
 		}
 
+		cfg := config.AppConfig
 		c.Set("admin_user", cfg.AdminUser)
 		c.Next()
 	}
 }
 
-// 生成管理员token
-func generateAdminToken(username, password, sysKey string) string {
-	hash := md5.Sum([]byte(username + password + password + sysKey))
-	return fmt.Sprintf("%x", hash)
+const adminTokenTTL = 30 * 24 * time.Hour
+
+// GenerateAdminToken 生成管理员Token，格式: username.ts.hmac(hex)
+func GenerateAdminToken(username, password, sysKey string) string {
+	ts := time.Now().Unix()
+	payload := username + "." + strconv.FormatInt(ts, 10)
+	mac := hmac.New(sha256.New, []byte(sysKey+"|"+password))
+	mac.Write([]byte(payload))
+	return payload + "." + hex.EncodeToString(mac.Sum(nil))
 }
 
-// IsValidAdminToken 校验管理员token是否有效
-func IsValidAdminToken(token string) bool {
+func verifyAdminToken(token, username, password, sysKey string) bool {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return false
 	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	if parts[0] != username {
+		return false
+	}
+
+	ts, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || ts <= 0 {
+		return false
+	}
+	now := time.Now().Unix()
+	if now-ts > int64(adminTokenTTL.Seconds()) || ts-now > 300 {
+		return false
+	}
+
+	payload := parts[0] + "." + parts[1]
+	mac := hmac.New(sha256.New, []byte(sysKey+"|"+password))
+	mac.Write([]byte(payload))
+	expected := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(strings.ToLower(strings.TrimSpace(parts[2]))), []byte(expected))
+}
+
+// IsValidAdminToken 校验管理员token是否有效
+func IsValidAdminToken(token string) bool {
 	cfg := config.AppConfig
-	expectedToken := generateAdminToken(cfg.AdminUser, cfg.AdminPwd, cfg.SysKey)
-	return token == expectedToken
+	return verifyAdminToken(token, cfg.AdminUser, cfg.AdminPwd, cfg.SysKey)
 }
 
 // 商户认证中间件
