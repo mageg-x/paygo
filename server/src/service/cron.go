@@ -170,29 +170,46 @@ func InitSystemCrons() {
 func AutoSettleTask() {
 	log.Println("[cron] auto settle task started")
 
-	// 获取已开启自动结算且余额足够的商户
+	minMoney := parseFloatWithDefault(config.Get("settle_money"), 30)
+	if minMoney <= 0 {
+		minMoney = 30
+	}
+
 	var users []model.User
-	config.DB.Where("money >= ?", 100).Find(&users)
+	if err := config.DB.Where("status = 1 AND settle = 1 AND money >= ?", minMoney).Find(&users).Error; err != nil {
+		log.Printf("[cron] auto settle query users failed: error=%s", err.Error())
+		return
+	}
+
+	settleSvc := NewSettleService()
+	success := 0
+	failed := 0
 
 	for _, user := range users {
-		// 计算待结算金额
-		if user.Money >= 100 {
-			settleMoney := user.Money * 0.97 // 扣除3%手续费
-
-			// 创建结算单
-			settle := &model.Settle{
-				UID:      user.UID,
-				Money:    settleMoney,
-				Account:  user.Account,
-				Username: user.Username,
-				Status:   0, // 待处理
-				Addtime:  time.Now(),
-			}
-			if err := config.DB.Create(settle).Error; err == nil {
-				log.Printf("[cron] merchant uid=%d, settle created: amount=%.2f", user.UID, settleMoney)
-			}
+		if strings.TrimSpace(user.Account) == "" {
+			log.Printf("[cron] auto settle skip: uid=%d, reason=missing settle account", user.UID)
+			continue
 		}
+
+		settleType := user.SettleID
+		if settleType < 1 || settleType > 4 {
+			settleType = 1
+		}
+
+		applyAmount := user.Money
+		if applyAmount < minMoney {
+			continue
+		}
+
+		if _, err := settleSvc.ApplyAutoSettle(user.UID, user.Account, user.Username, applyAmount, settleType); err != nil {
+			failed++
+			log.Printf("[cron] auto settle failed: uid=%d, money=%.2f, error=%s", user.UID, applyAmount, err.Error())
+			continue
+		}
+		success++
 	}
+
+	log.Printf("[cron] auto settle completed: success=%d, failed=%d", success, failed)
 }
 
 // 回调重试任务
@@ -246,6 +263,18 @@ func toString(v interface{}) string {
 	default:
 		return strings.TrimSpace(fmt.Sprintf("%v", v))
 	}
+}
+
+func parseFloatWithDefault(raw string, def float64) float64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return def
+	}
+	return v
 }
 
 func toBool(v interface{}) bool {

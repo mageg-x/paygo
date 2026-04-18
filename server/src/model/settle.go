@@ -27,6 +27,7 @@ type Settle struct {
 	Endtime         time.Time `gorm:"column:endtime" json:"endtime"`
 	Status          int       `gorm:"column:status" json:"status"`
 	TransferStatus  int       `gorm:"column:transfer_status" json:"transfer_status"`
+	TransferNo      string    `gorm:"column:transfer_no" json:"transfer_no"`
 	TransferResult  string    `gorm:"column:transfer_result" json:"transfer_result"`
 	TransferDate    time.Time `gorm:"column:transfer_date" json:"transfer_date"`
 	Result          string    `gorm:"column:result" json:"result"`

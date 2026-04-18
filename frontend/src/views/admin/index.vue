@@ -11,11 +11,11 @@
       <div class="relative px-4 py-4 md:px-6 md:py-6">
         <div class="absolute inset-0 bg-gradient-to-r from-sky-500/15 via-blue-500/10 to-teal-400/15 pointer-events-none"></div>
         <div class="relative grid grid-cols-2 gap-2 md:gap-4">
-          <div class="rounded-xl md:rounded-2xl border border-slate-200/70 bg-white/88 px-3 py-2.5 md:px-6 md:py-5 shadow-sm min-h-[78px] md:min-h-[116px] flex flex-col justify-between">
+          <div class="rounded-xl md:rounded-2xl border border-slate-200/70  bg-slate-50 px-3 py-2.5 md:px-6 md:py-5 shadow-sm min-h-[78px] md:min-h-[116px] flex flex-col justify-between">
             <div class="text-xs md:text-sm text-slate-500 no-wrap">昨日订单</div>
             <div class="text-lg md:text-3xl font-semibold text-slate-800 leading-none">{{ stats.yesterday_order_count }}</div>
           </div>
-          <div class="rounded-xl md:rounded-2xl border border-slate-200/70 bg-white/88 px-3 py-2.5 md:px-6 md:py-5 shadow-sm min-h-[78px] md:min-h-[116px] flex flex-col justify-between">
+          <div class="rounded-xl md:rounded-2xl border border-slate-200/70 bg-slate-50 px-3 py-2.5 md:px-6 md:py-5 shadow-sm min-h-[78px] md:min-h-[116px] flex flex-col justify-between">
             <div class="text-xs md:text-sm text-slate-500 no-wrap">昨日交易额</div>
             <div class="text-lg md:text-3xl font-semibold text-amber-600 leading-none">¥{{ stats.yesterday_order_money.toFixed(2) }}</div>
           </div>

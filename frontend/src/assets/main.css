@@ -100,7 +100,7 @@ body {
 
 .btn {
   @apply inline-flex items-center justify-center px-3 py-2 md:px-4 md:py-2.5 rounded-xl font-medium transition-all duration-200 focus:outline-none;
-  min-height: 40px;
+  min-height: 36px;
   white-space: nowrap;
   box-shadow: 0 6px 14px -10px rgba(15, 23, 42, 0.5);
   transform: translateY(0);

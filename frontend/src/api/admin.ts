@@ -86,7 +86,7 @@ export function getSettleList(params: { page?: number; limit?: number }): Promis
 }
 
 // 结算操作
-export function settleOp(data: { action: string; id: number;[key: string]: any }): Promise<ApiResponse> {
+export function settleOp(data: { action: string; id: number; reason?: string; amount?: number; [key: string]: any }): Promise<ApiResponse> {
   return request.post('/admin/settle/op', data)
 }
 

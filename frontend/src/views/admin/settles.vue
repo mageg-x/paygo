@@ -3,7 +3,7 @@
     <div class="page-head">
       <div>
         <h1 class="page-title no-wrap">结算管理</h1>
-        <p class="page-subtitle">管理商户结算申请</p>
+        <p class="page-subtitle">管理商户结算申请，支持多退少补（补发差额 / 冲正扣回）</p>
       </div>
       <select v-model="filterStatus" @change="page = 1; fetchSettles()"
         class="form-input w-auto min-w-[132px] px-3">
@@ -33,6 +33,10 @@
         <div class="text-sm text-gray-500">已拒绝</div>
         <div class="text-2xl font-bold text-rose-600 mt-1">{{ statusCount(3) }}</div>
       </div>
+    </div>
+
+    <div class="card p-3 md:p-4 text-sm text-slate-600">
+      转账发起入口在本页面：待处理结算可“同意”执行打款；已处理结算可做“补发差额 / 冲正扣回”。
     </div>
 
     <div class="table-shell">
@@ -79,7 +83,10 @@
                   <button @click="handleReject(s.id)" class="action-link action-link-danger">拒绝</button>
                 </template>
                 <template v-else>
-                  <span class="text-gray-400 text-xs">{{ statusMap[s.status]?.text }}</span>
+                  <div class="inline-flex items-center gap-1">
+                    <button @click="openAdjustModal(s.id, 'compensate')" class="action-link action-link-success">补发差额</button>
+                    <button @click="openAdjustModal(s.id, 'deduct')" class="action-link action-link-warning">冲正扣回</button>
+                  </div>
                 </template>
               </td>
             </tr>
@@ -136,6 +143,35 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showAdjustModal" class="dialog-backdrop">
+      <div class="dialog-wrap">
+        <div class="dialog-mask" @click="showAdjustModal = false"></div>
+        <div class="dialog-panel max-w-md">
+          <div class="dialog-header">
+            <div>
+              <h3 class="dialog-title">{{ adjustAction === 'compensate' ? '补发差额' : '冲正扣回' }}</h3>
+              <p class="dialog-subtitle">请输入金额与原因</p>
+            </div>
+            <button class="dialog-close" @click="showAdjustModal = false">✕</button>
+          </div>
+          <div class="dialog-body space-y-4">
+            <div>
+              <label class="form-label">金额</label>
+              <input v-model.number="adjustAmount" type="number" min="0.01" step="0.01" class="form-input px-3" />
+            </div>
+            <div>
+              <label class="form-label">原因</label>
+              <textarea v-model="adjustReason" class="form-input h-24 resize-none px-3" placeholder="请输入原因"></textarea>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <button @click="showAdjustModal = false" class="btn btn-outline">取消</button>
+            <button @click="confirmAdjust" class="btn btn-primary">确认</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -155,6 +191,11 @@ const filterStatus = ref(-1)
 const showRejectModal = ref(false)
 const currentRejectId = ref<number | null>(null)
 const rejectReason = ref('')
+const showAdjustModal = ref(false)
+const currentAdjustId = ref<number | null>(null)
+const adjustAction = ref<'compensate' | 'deduct'>('compensate')
+const adjustAmount = ref<number>(0.01)
+const adjustReason = ref('')
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value) || 1)
 
@@ -245,6 +286,39 @@ async function confirmReject() {
     fetchSettles()
   } catch (error) {
     console.error('操作失败:', error)
+  }
+}
+
+function openAdjustModal(id: number, action: 'compensate' | 'deduct') {
+  currentAdjustId.value = id
+  adjustAction.value = action
+  adjustAmount.value = 0.01
+  adjustReason.value = ''
+  showAdjustModal.value = true
+}
+
+async function confirmAdjust() {
+  if (!currentAdjustId.value) return
+  if (!adjustAmount.value || adjustAmount.value <= 0) {
+    ElMessage.warning('请输入正确金额')
+    return
+  }
+  if (!adjustReason.value.trim()) {
+    ElMessage.warning('请输入原因')
+    return
+  }
+  try {
+    const res = await settleOp({
+      action: adjustAction.value,
+      id: currentAdjustId.value,
+      amount: Number(adjustAmount.value),
+      reason: adjustReason.value.trim()
+    })
+    ElMessage.success(res.msg || '操作成功')
+    showAdjustModal.value = false
+    fetchSettles()
+  } catch (error) {
+    console.error('调整失败:', error)
   }
 }
 

@@ -93,7 +93,7 @@
     <div v-if="showConfigModal" class="dialog-backdrop">
       <div class="dialog-wrap">
         <div class="dialog-mask" @click="showConfigModal = false"></div>
-        <div class="dialog-panel max-w-lg">
+        <div class="dialog-panel max-w-lg overflow-hidden">
           <div class="dialog-header">
             <div>
               <h3 class="dialog-title">配置插件</h3>
@@ -186,26 +186,35 @@
             </div>
 
             <div v-if="currentPlugin?.inputs && Object.keys(currentPlugin.inputs).length > 0" class="section-card">
-              <div class="font-medium text-gray-700 mb-2">参数说明</div>
-              <div class="space-y-2">
-                <div v-for="(input, key) in currentPlugin.inputs" :key="key" class="flex items-start gap-2 text-sm">
-                  <span class="font-mono text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded min-w-[80px]">{{ key }}</span>
-                  <span class="text-gray-500">{{ input.name }}</span>
-                  <span v-if="input.note" class="text-gray-400 text-xs">({{ input.note }})</span>
-                </div>
-              </div>
+              <div class="font-medium text-gray-700 mb-3">参数说明</div>
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-200">
+                    <th class="text-left py-1.5 pr-4 font-semibold text-gray-600 w-[140px]">参数名</th>
+                    <th class="text-left py-1.5 pr-4 font-semibold text-gray-600">说明</th>
+                    <th class="text-left py-1.5 font-semibold text-gray-600">备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(input, key) in currentPlugin.inputs" :key="key" class="border-b border-gray-100 last:border-b-0">
+                    <td class="py-1.5 pr-4 font-mono text-gray-700 bg-gray-50 rounded px-1.5 align-top">{{ key }}</td>
+                    <td class="py-1.5 pr-4 text-gray-800 align-top whitespace-nowrap">{{ input.name }}</td>
+                    <td class="py-1.5 text-gray-400 text-xs align-top break-all">{{ input.note || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
           <div class="dialog-footer justify-between">
-            <button @click="showConfigModal = false" class="btn btn-outline">关闭</button>
+            <button @click="showConfigModal = false" class="btn !h-9 btn-outline">关闭</button>
             <button v-if="currentPlugin?.name === 'alipay' || currentPlugin?.name === 'wxpay'"
-              @click="testPluginConfig" class="btn btn-success flex items-center gap-2">
+              @click="testPluginConfig" class="btn !h-9 btn-success flex items-center gap-2">
               <TestIcon class="w-4 h-4" />
               测试配置
             </button>
             <button @click="savePluginConfig" :disabled="!currentPlugin"
-              class="btn btn-primary disabled:opacity-50">保存配置</button>
+              class="btn !h-9 btn-primary disabled:opacity-50">保存配置</button>
           </div>
         </div>
       </div>

@@ -2,8 +2,8 @@
   <div class="space-y-4">
     <div class="page-head">
       <div>
-        <h1 class="page-title no-wrap">转账管理</h1>
-        <p class="page-subtitle">管理所有转账记录</p>
+        <h1 class="page-title no-wrap">转账记录</h1>
+        <p class="page-subtitle">查看转账执行结果；发起入口在结算管理（同意结算 / 补发差额）</p>
       </div>
     </div>
 

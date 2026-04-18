@@ -258,7 +258,9 @@
                 <select v-model="form.transfer_alipay"
                   class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">请选择</option>
-                  <option value="alipay">支付宝官方</option>
+                  <option v-for="ch in transferAlipayChannels" :key="`ali_${ch.id}`" :value="String(ch.id)">
+                    #{{ ch.id }} {{ ch.name || ch.plugin_showname || ch.plugin }}
+                  </option>
                 </select>
               </div>
               <div>
@@ -266,9 +268,15 @@
                 <select v-model="form.transfer_wxpay"
                   class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">请选择</option>
-                  <option value="wxpay">微信支付</option>
+                  <option v-for="ch in transferWxpayChannels" :key="`wx_${ch.id}`" :value="String(ch.id)">
+                    #{{ ch.id }} {{ ch.name || ch.plugin_showname || ch.plugin }}
+                  </option>
                 </select>
               </div>
+            </div>
+            <div class="text-xs text-gray-500 space-y-1">
+              <p>提示：这里只能选择支持对应转账能力的已启用通道。</p>
+              <p v-if="transferChannelWarn" class="text-rose-600">{{ transferChannelWarn }}</p>
             </div>
           </div>
           <div class="mt-6 pt-4 border-t">
@@ -596,7 +604,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { saveConfig, getConfig } from '@/api/admin'
+import { saveConfig, getConfig, getChannelList } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 
 const activeTab = ref('site')
@@ -700,6 +708,18 @@ const saving = ref(false)
 const passwordSaving = ref(false)
 const successMsg = ref('')
 const errorMsg = ref('')
+type ChannelItem = {
+  id: number
+  plugin: string
+  name?: string
+  status?: number
+  plugin_showname?: string
+  plugin_select?: Record<string, string>
+}
+
+const transferAlipayChannels = ref<ChannelItem[]>([])
+const transferWxpayChannels = ref<ChannelItem[]>([])
+const transferChannelWarn = ref('')
 
 async function loadConfig() {
   try {
@@ -782,12 +802,59 @@ async function loadConfig() {
   }
 }
 
+function pluginSupportsTransferType(item: ChannelItem, transferType: 'alipay' | 'wxpay') {
+  const plugin = String(item.plugin || '').toLowerCase()
+  if (transferType === 'alipay') return plugin === 'alipay'
+  if (transferType === 'wxpay') return plugin === 'wxpay'
+  return false
+}
+
+async function loadTransferChannels() {
+  try {
+    const res = await getChannelList()
+    const list = Array.isArray(res?.data) ? (res.data as ChannelItem[]) : []
+    const enabled = list.filter(ch => Number(ch.status || 0) === 1)
+    transferAlipayChannels.value = enabled.filter(ch => pluginSupportsTransferType(ch, 'alipay'))
+    transferWxpayChannels.value = enabled.filter(ch => pluginSupportsTransferType(ch, 'wxpay'))
+  } catch (e) {
+    transferAlipayChannels.value = []
+    transferWxpayChannels.value = []
+  }
+}
+
+function validateTransferSelectionLocal() {
+  transferChannelWarn.value = ''
+  if (activeTab.value !== 'transfer') return true
+
+  if (form.transfer_alipay) {
+    const ok = transferAlipayChannels.value.some(ch => String(ch.id) === String(form.transfer_alipay))
+    if (!ok) {
+      transferChannelWarn.value = '支付宝转账通道配置无效：请选择支持支付宝转账的已启用通道。'
+      return false
+    }
+  }
+
+  if (form.transfer_wxpay) {
+    const ok = transferWxpayChannels.value.some(ch => String(ch.id) === String(form.transfer_wxpay))
+    if (!ok) {
+      transferChannelWarn.value = '微信转账通道配置无效：请选择支持微信转账的已启用通道。'
+      return false
+    }
+  }
+
+  return true
+}
+
 async function handleSave() {
   saving.value = true
   successMsg.value = ''
   errorMsg.value = ''
 
   try {
+    if (!validateTransferSelectionLocal()) {
+      errorMsg.value = transferChannelWarn.value || '转账通道配置不正确'
+      return
+    }
     const res = await saveConfig({ mod: activeTab.value, ...form })
     if (res.code === 0) {
       successMsg.value = '保存成功'
@@ -846,5 +913,6 @@ async function handlePasswordChange() {
 
 onMounted(() => {
   loadConfig()
+  loadTransferChannels()
 })
 </script>

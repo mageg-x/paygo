@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"paygo/src/config"
@@ -39,55 +40,44 @@ func (s *ProfitService) ProcessProfitSharing(tradeNo string) error {
 		return errors.New("订单不存在")
 	}
 
-	// 检查是否已分账
 	if order.Profits == 1 {
 		log.Printf("[profit_sharing_skipped] trade_no=%s, reason=already processed", tradeNo)
 		return nil
 	}
-
-	// 检查订单状态
 	if order.Status != model.OrderStatusPaid {
 		log.Printf("[profit_sharing_skipped] trade_no=%s, reason=order not paid, status=%d", tradeNo, order.Status)
 		return errors.New("订单未支付")
 	}
-
-	// 充值订单不参与分账
 	if order.Tid == 2 {
 		log.Printf("[profit_sharing_skipped] trade_no=%s, reason=recharge order", tradeNo)
 		return nil
 	}
 
-	// 获取商户的分账接收人
 	var receivers []model.PsReceiver
 	config.DB.Where("uid = ? AND status = 1", order.UID).Find(&receivers)
-
 	if len(receivers) == 0 {
 		log.Printf("[profit_sharing_skipped] trade_no=%s, reason=no receivers configured", tradeNo)
 		return nil
 	}
 
-	// 获取通道信息
 	var channel model.Channel
 	if config.DB.First(&channel, order.Channel).Error != nil {
 		log.Printf("[profit_sharing_failed] trade_no=%s, reason=channel not found", tradeNo)
 		return errors.New("通道不存在")
 	}
 
-	// 获取通道插件
 	pluginHandler := plugin.GetHandler(channel.Plugin)
 	if pluginHandler == nil {
 		log.Printf("[profit_sharing_failed] trade_no=%s, plugin=%s, reason=plugin not found", tradeNo, channel.Plugin)
 		return errors.New("支付通道插件不存在")
 	}
 
-	// 检查插件是否支持分账
 	pluginInfo := pluginHandler.GetInfo()
 	if !containsString(pluginInfo.Transtypes, "profitsharing") && !containsString(pluginInfo.Transtypes, "ps") {
 		log.Printf("[profit_sharing_skipped] trade_no=%s, plugin=%s, reason=plugin not support profitsharing", tradeNo, channel.Plugin)
 		return nil
 	}
 
-	// 执行分账
 	successCount := 0
 	failCount := 0
 
@@ -98,18 +88,16 @@ func (s *ProfitService) ProcessProfitSharing(tradeNo string) error {
 			failCount++
 			continue
 		}
-
 		if result {
 			successCount++
 		}
 	}
 
-	// 更新订单分账状态
 	if failCount == 0 && successCount > 0 {
 		config.DB.Model(&order).Update("profits", 1)
 		log.Printf("[profit_sharing_success] trade_no=%s, count=%d", tradeNo, successCount)
 	} else if successCount > 0 {
-		config.DB.Model(&order).Update("profits", 2) // 部分分账
+		config.DB.Model(&order).Update("profits", 2)
 		log.Printf("[profit_sharing_partial] trade_no=%s, success=%d, fail=%d", tradeNo, successCount, failCount)
 	} else {
 		log.Printf("[profit_sharing_all_failed] trade_no=%s, count=%d", tradeNo, failCount)
@@ -120,16 +108,14 @@ func (s *ProfitService) ProcessProfitSharing(tradeNo string) error {
 
 // 执行单笔分账
 func (s *ProfitService) executeProfitSharing(order model.Order, channel model.Channel, receiver model.PsReceiver, pluginHandler plugin.Plugin) (bool, error) {
-	// 计算分账金额
-	rate, _ := strconv.ParseFloat(receiver.Rate, 10)
+	rate, _ := strconv.ParseFloat(receiver.Rate, 64)
 	if rate <= 0 || rate > 100 {
 		log.Printf("[execute_profit_sharing_failed] receiver=%d, reason=invalid rate=%s", receiver.ID, receiver.Rate)
 		return false, errors.New("分账比例无效")
 	}
 
-	// 检查最低分账金额
 	if receiver.Minmoney != "" {
-		minMoney, _ := strconv.ParseFloat(receiver.Minmoney, 10)
+		minMoney, _ := strconv.ParseFloat(receiver.Minmoney, 64)
 		if order.Realmoney < minMoney {
 			log.Printf("[execute_profit_sharing_skipped] receiver=%d, reason=below min_money", receiver.ID)
 			return false, nil
@@ -137,8 +123,10 @@ func (s *ProfitService) executeProfitSharing(order model.Order, channel model.Ch
 	}
 
 	profitMoney := order.Realmoney * rate / 100
+	if profitMoney <= 0 {
+		return false, nil
+	}
 
-	// 构造分账参数
 	params := map[string]interface{}{
 		"trade_no":     order.TradeNo,
 		"api_trade_no": order.ApiTradeNo,
@@ -148,42 +136,49 @@ func (s *ProfitService) executeProfitSharing(order model.Order, channel model.Ch
 		"channel":      channel,
 	}
 
-	// 调用插件分账接口
-	// 注意：部分插件可能没有实现分账接口，需要根据实际情况处理
+	// 说明：当前插件接口未独立提供 ProfitSharing，暂沿用 Transfer 作为兼容实现。
 	result, err := pluginHandler.Transfer(params)
 	if err != nil {
 		log.Printf("[execute_profit_sharing_failed] receiver=%d, reason=plugin error, error=%s", receiver.ID, err.Error())
 		return false, err
 	}
-
 	if result.Code != 0 {
 		log.Printf("[execute_profit_sharing_failed] receiver=%d, reason=plugin rejected, code=%d, msg=%s", receiver.ID, result.Code, result.ErrMsg)
 		return false, errors.New(result.ErrMsg)
 	}
 
-	// 记录分账订单
+	tx := config.DB.Begin()
+	if tx.Error != nil {
+		return false, errors.New("系统繁忙，请稍后重试")
+	}
+
 	psOrder := &model.PsOrder{
 		RID:        int(receiver.ID),
 		TradeNo:    order.TradeNo,
 		ApiTradeNo: order.ApiTradeNo,
+		SettleNo:   strings.TrimSpace(result.OrderID),
 		Money:      profitMoney,
 		Status:     PsStatusCompleted,
 		Result:     result.OrderID,
 		Addtime:    time.Now(),
 	}
-	config.DB.Create(psOrder)
+	if err := tx.Create(psOrder).Error; err != nil {
+		tx.Rollback()
+		return false, err
+	}
 
-	// 给接收人加款
 	var receiverUser model.User
-	if config.DB.Where("uid = ?", receiver.UID).First(&receiverUser).Error == nil {
+	if err := tx.Where("uid = ?", receiver.UID).First(&receiverUser).Error; err == nil {
 		oldMoney := receiverUser.Money
 		newMoney := oldMoney + profitMoney
-		config.DB.Model(&receiverUser).Update("money", newMoney)
+		if err := tx.Model(&receiverUser).Update("money", newMoney).Error; err != nil {
+			tx.Rollback()
+			return false, err
+		}
 
-		// 记录资金变动
 		record := &model.Record{
 			UID:      receiver.UID,
-			Action:   9, // 分账收入
+			Action:   9,
 			Money:    profitMoney,
 			Oldmoney: oldMoney,
 			Newmoney: newMoney,
@@ -191,7 +186,14 @@ func (s *ProfitService) executeProfitSharing(order model.Order, channel model.Ch
 			TradeNo:  order.TradeNo,
 			Date:     time.Now(),
 		}
-		config.DB.Create(record)
+		if err := tx.Create(record).Error; err != nil {
+			tx.Rollback()
+			return false, err
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return false, err
 	}
 
 	log.Printf("[execute_profit_sharing_success] receiver=%d, money=%.2f, order_id=%s", receiver.ID, profitMoney, result.OrderID)
@@ -207,7 +209,7 @@ func (s *ProfitService) GetReceivers(uid uint) ([]model.PsReceiver, error) {
 
 // 添加分账接收人
 func (s *ProfitService) AddReceiver(uid uint, account, name, rate, minmoney string, channelID int) (*model.PsReceiver, error) {
-	rateVal, _ := strconv.ParseFloat(rate, 10)
+	rateVal, _ := strconv.ParseFloat(rate, 64)
 	if rateVal <= 0 || rateVal > 100 {
 		return nil, errors.New("分账比例无效")
 	}

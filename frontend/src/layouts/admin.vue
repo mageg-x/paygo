@@ -114,7 +114,7 @@ const menuSections = [
     items: [
       { path: '/admin/orders', name: '订单管理', icon: FileText },
       { path: '/admin/settles', name: '结算管理', icon: Wallet },
-      { path: '/admin/transfers', name: '转账管理', icon: ArrowLeftRight },
+      { path: '/admin/transfers', name: '转账记录', icon: ArrowLeftRight },
       { path: '/admin/profit', name: '分账管理', icon: Coins }
     ]
   },

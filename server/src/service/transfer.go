@@ -23,6 +23,21 @@ func NewTransferService() *TransferService {
 	}
 }
 
+func parseTransferFeeRate() float64 {
+	raw := strings.TrimSpace(config.Get("transfer_fee"))
+	if raw == "" {
+		return 0
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0
+	}
+	if v < 0 {
+		return 0
+	}
+	return v / 100
+}
+
 // 创建转账
 func (s *TransferService) CreateTransfer(uid uint, transferType, account, username string, money float64, desc string) (*model.Transfer, error) {
 	if money <= 0 {
@@ -89,8 +104,8 @@ func (s *TransferService) CreateTransfer(uid uint, transferType, account, userna
 	// 生成转账单号
 	bizNo := fmt.Sprintf("T%s%d", time.Now().Format("20060102150405"), time.Now().UnixNano()%1000000)
 
-	// 计算手续费（假设0.1%）
-	costRate := 0.001
+	// 计算手续费（读取系统配置 transfer_fee，单位%）
+	costRate := parseTransferFeeRate()
 	costMoney := money * costRate
 
 	tx := config.DB.Begin()
@@ -246,22 +261,43 @@ func (s *TransferService) RefundTransfer(bizNo string) error {
 }
 
 func (s *TransferService) selectTransferChannel(transferType string) (*model.Channel, error) {
+	transferType = strings.ToLower(strings.TrimSpace(transferType))
+	cfgKey := ""
+	switch transferType {
+	case "alipay":
+		cfgKey = "transfer_alipay"
+	case "wxpay":
+		cfgKey = "transfer_wxpay"
+	}
+
+	if cfgKey != "" {
+		configured := strings.TrimSpace(config.Get(cfgKey))
+		if configured != "" {
+			if id, err := strconv.Atoi(configured); err == nil && id > 0 {
+				var fixed model.Channel
+				if err := config.DB.Where("id = ? AND status = 1", id).First(&fixed).Error; err == nil {
+					handler := plugin.GetHandler(fixed.Plugin)
+					if handler != nil && supportsTransferType(handler.GetInfo().Transtypes, transferType) {
+						return &fixed, nil
+					}
+				}
+			}
+		}
+	}
+
 	var channels []model.Channel
 	if err := config.DB.Where("status = 1").Order("id ASC").Find(&channels).Error; err != nil {
 		return nil, errors.New("获取通道失败")
 	}
-
 	for _, ch := range channels {
 		handler := plugin.GetHandler(ch.Plugin)
 		if handler == nil {
 			continue
 		}
-		info := handler.GetInfo()
-		if supportsTransferType(info.Transtypes, transferType) {
+		if supportsTransferType(handler.GetInfo().Transtypes, transferType) {
 			return &ch, nil
 		}
 	}
-
 	return nil, errors.New("没有可用的转账通道")
 }
 

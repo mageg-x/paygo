@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -386,11 +387,15 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 		cfgMap["settle_wxpay"] = req.SettleWxpay
 		cfgMap["settle_auto_transfer"] = req.SettleAutoTransfer
 	case "transfer":
+		if err := validateTransferSettings(req.TransferAlipay, req.TransferWxpay); err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+			return
+		}
 		cfgMap["transfer_min"] = req.TransferMin
 		cfgMap["transfer_max"] = req.TransferMax
 		cfgMap["transfer_fee"] = req.TransferFee
-		cfgMap["transfer_alipay"] = req.TransferAlipay
-		cfgMap["transfer_wxpay"] = req.TransferWxpay
+		cfgMap["transfer_alipay"] = strings.TrimSpace(req.TransferAlipay)
+		cfgMap["transfer_wxpay"] = strings.TrimSpace(req.TransferWxpay)
 		cfgMap["transfer_show_name"] = req.TransferShowName
 	case "oauth":
 		cfgMap["login_alipay"] = req.LoginAlipay
@@ -433,6 +438,56 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功"})
+}
+
+func validateTransferChannelSelection(channelIDRaw string, expectedTransferType string) error {
+	channelIDRaw = strings.TrimSpace(channelIDRaw)
+	if channelIDRaw == "" {
+		return nil
+	}
+	channelID, err := strconv.Atoi(channelIDRaw)
+	if err != nil || channelID <= 0 {
+		return fmt.Errorf("转账通道配置无效")
+	}
+
+	var channel model.Channel
+	if err := config.DB.Where("id = ? AND status = 1", channelID).First(&channel).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("所选转账通道不存在或已禁用")
+		}
+		return fmt.Errorf("校验转账通道失败")
+	}
+
+	handler := plugin.GetHandler(channel.Plugin)
+	if handler == nil {
+		return fmt.Errorf("所选转账通道插件不存在")
+	}
+	info := handler.GetInfo()
+	for _, t := range info.Transtypes {
+		tt := strings.ToLower(strings.TrimSpace(t))
+		if tt == expectedTransferType || tt == "all" {
+			return nil
+		}
+	}
+
+	label := "该通道"
+	switch expectedTransferType {
+	case "alipay":
+		label = "支付宝转账"
+	case "wxpay":
+		label = "微信转账"
+	}
+	return fmt.Errorf("所选通道不支持%s", label)
+}
+
+func validateTransferSettings(reqTransferAlipay, reqTransferWxpay string) error {
+	if err := validateTransferChannelSelection(reqTransferAlipay, "alipay"); err != nil {
+		return err
+	}
+	if err := validateTransferChannelSelection(reqTransferWxpay, "wxpay"); err != nil {
+		return err
+	}
+	return nil
 }
 
 // 通道管理
@@ -521,6 +576,15 @@ func (h *AdminHandler) AjaxTransferOp(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "状态已更新"})
 		return
 	case "delete":
+		var transfer model.Transfer
+		if err := config.DB.Where("biz_no = ?", req.BizNo).First(&transfer).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "记录不存在"})
+			return
+		}
+		if transfer.Status == 0 {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "处理中记录不允许删除"})
+			return
+		}
 		result := config.DB.Where("biz_no = ?", req.BizNo).Delete(&model.Transfer{})
 		if result.Error != nil {
 			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "删除失败"})
@@ -1690,9 +1754,10 @@ func generateAPIKey() string {
 // AJAX: 结算操作
 func (h *AdminHandler) AjaxSettleOp(c *gin.Context) {
 	var req struct {
-		Action string `json:"action"`
-		ID     uint   `json:"id"`
-		Reason string `json:"reason"`
+		Action string  `json:"action"`
+		ID     uint    `json:"id"`
+		Reason string  `json:"reason"`
+		Amount float64 `json:"amount"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
@@ -1705,6 +1770,13 @@ func (h *AdminHandler) AjaxSettleOp(c *gin.Context) {
 		err = h.settleSvc.ApproveSettle(req.ID)
 	case "reject":
 		err = h.settleSvc.RejectSettle(req.ID, req.Reason)
+	case "compensate":
+		err = h.settleSvc.AdjustSettleCompensate(req.ID, req.Amount, req.Reason)
+	case "deduct":
+		err = h.settleSvc.AdjustSettleDeduct(req.ID, req.Amount, req.Reason)
+	default:
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+		return
 	}
 
 	if err != nil {

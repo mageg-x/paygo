@@ -94,6 +94,9 @@ func InitDB() {
 		log.Fatalf("[init] database migration failed: %v", err)
 	}
 
+	// 补齐历史表结构
+	ensureSettleTransferNoColumn(sqlDB)
+
 	// 设置自增ID从10000开始
 	setAutoIncrementStart(sqlDB)
 
@@ -325,4 +328,44 @@ func initDefaultGroup() {
 		DB.Create(&group)
 		log.Printf("[init] default group created: gid=%d", group.GID)
 	}
+}
+
+func ensureSettleTransferNoColumn(db *sql.DB) {
+	rows, err := db.Query(`PRAGMA table_info(settle)`)
+	if err != nil {
+		log.Printf("[init] query settle table info failed: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	hasTransferNo := false
+	for rows.Next() {
+		var cid int
+		var name string
+		var ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			log.Printf("[init] scan settle table info failed: %v", err)
+			continue
+		}
+		if name == "transfer_no" {
+			hasTransferNo = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("[init] iterate settle table info failed: %v", err)
+		return
+	}
+	if hasTransferNo {
+		return
+	}
+
+	if _, err := db.Exec(`ALTER TABLE settle ADD COLUMN transfer_no text`); err != nil {
+		log.Printf("[init] add settle.transfer_no failed: %v", err)
+		return
+	}
+	log.Printf("[init] migration applied: add settle.transfer_no")
 }
