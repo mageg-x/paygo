@@ -177,8 +177,8 @@ func initDefaultConfig() {
 		{"user_review", "0"},     // 注册无需审核
 		{"test_open", "0"},       // 测试支付关闭
 		{"test_pay_uid", "1000"}, // 测试支付收款商户
-		{"sitename", "PayGo支付"},
-		{"title", "PayGo支付"},
+		{"sitename", "GoPay支付"},
+		{"title", "GoPay支付"},
 		{"localurl", "http://127.0.0.1:8080/"},
 		{"apiurl", "http://127.0.0.1:8080/"},
 		{"site_keywords", ""},
@@ -210,7 +210,7 @@ func initDefaultConfig() {
 		{"transfer_fee", "0"},
 		{"transfer_alipay", "0"},
 		{"transfer_wxpay", "0"},
-		{"transfer_show_name", "PayGo支付"},
+		{"transfer_show_name", "GoPay支付"},
 		// 快捷登录
 		{"login_alipay", "0"},
 		{"login_qq", "0"},
@@ -241,7 +241,7 @@ func initDefaultConfig() {
 		{"sms_provider", "aliyun"},
 		{"sms_access_key_id", ""},
 		{"sms_access_key_secret", ""},
-		{"sms_sign_name", "PayGo支付"},
+		{"sms_sign_name", "GoPay支付"},
 		{"sms_template_code", ""},
 		{"sms_order_template_code", ""},
 		// 计划任务设置

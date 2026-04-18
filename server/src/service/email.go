@@ -2,8 +2,9 @@ package service
 
 import (
 	"fmt"
-	"gopkg.in/gomail.v2"
 	"paygo/src/config"
+
+	"gopkg.in/gomail.v2"
 )
 
 // 邮件服务
@@ -31,7 +32,7 @@ func (s *EmailService) Send(to, subject, body string) error {
 	}
 
 	m := gomail.NewMessage()
-	m.SetAddressHeader("From", username, "PayGo支付系统")
+	m.SetAddressHeader("From", username, "GoPay支付系统")
 	m.SetHeader("To", to)
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", body)
@@ -46,11 +47,11 @@ func (s *EmailService) Send(to, subject, body string) error {
 
 // 发送验证码邮件
 func (s *EmailService) SendCode(email, code string) error {
-	subject := "【PayGo支付】验证码"
+	subject := "【GoPay支付】验证码"
 	body := fmt.Sprintf(`
 		<div style="max-width: 500px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
 			<div style="background: #007bff; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-				<h2>PayGo支付系统</h2>
+				<h2>GoPay支付系统</h2>
 			</div>
 			<div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px;">
 				<p style="font-size: 16px; color: #333;">您好！</p>
@@ -70,7 +71,7 @@ func (s *EmailService) SendCode(email, code string) error {
 
 // 发送订单通知
 func (s *EmailService) SendOrderNotify(email, tradeNo, amount string) error {
-	subject := "【PayGo支付】订单通知"
+	subject := "【GoPay支付】订单通知"
 	body := fmt.Sprintf(`
 		<div style="max-width: 500px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif;">
 			<div style="background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">

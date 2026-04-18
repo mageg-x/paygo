@@ -6,7 +6,7 @@
         <div class="flex items-center gap-3">
           <img src="@/assets/paygo.png" alt="Logo" class="w-10 h-10" />
           <div>
-            <h1 class="text-xl font-bold text-white">PayGo支付系统</h1>
+            <h1 class="text-xl font-bold text-white">GoPay支付系统</h1>
             <p class="text-blue-100 text-sm">安装向导</p>
           </div>
         </div>
@@ -109,7 +109,7 @@
               </svg>
             </div>
             <h2 class="text-xl font-semibold text-gray-900 mb-2">安装成功！</h2>
-            <p class="text-gray-500 mb-6">PayGo支付系统已安装完成</p>
+            <p class="text-gray-500 mb-6">GoPay支付系统已安装完成</p>
             <button @click="goToAdmin"
               class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
               前往管理后台

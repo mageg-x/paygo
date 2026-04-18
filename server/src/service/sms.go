@@ -3,11 +3,12 @@ package service
 import (
 	"fmt"
 
+	"paygo/src/config"
+
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	"github.com/alibabacloud-go/dysmsapi-20170525/v2/client"
 	"github.com/alibabacloud-go/tea-utils/service"
 	"github.com/alibabacloud-go/tea/tea"
-	"paygo/src/config"
 )
 
 // 短信服务
@@ -47,7 +48,7 @@ func (s *SmsService) Send(phone string, templateCode string, params map[string]s
 
 	signName := config.Get("sms_sign_name")
 	if signName == "" {
-		signName = "PayGo支付"
+		signName = "GoPay支付"
 	}
 
 	templateParam := ""

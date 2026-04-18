@@ -55,6 +55,7 @@ func SetupRouter() *gin.Engine {
 	{
 		// 支付接口（公开）
 		api.POST("/pay/submit", apiHandler.Submit)
+		api.POST("/pay/cashier_submit", apiHandler.CashierSubmit)
 		api.POST("/pay/create", apiHandler.Create)
 		api.GET("/pay/query", apiHandler.Query)
 		api.POST("/pay/query", apiHandler.Query)
@@ -121,6 +122,8 @@ func SetupRouter() *gin.Engine {
 			adminAuth.GET("/log", adminHandler.AjaxLogList)
 			// SSO单点登录
 			adminAuth.POST("/sso", adminHandler.AjaxSSOLogin)
+			adminAuth.GET("/sso/recent", adminHandler.AjaxSSORecent)
+			adminAuth.POST("/sso/recent/op", adminHandler.AjaxSSORecentOp)
 			// 计划任务
 			adminAuth.GET("/cron", adminHandler.AjaxCronList)
 			adminAuth.POST("/cron/op", adminHandler.AjaxCronOp)

@@ -1,7 +1,6 @@
 package user
 
 import (
-	"crypto/md5"
 	"fmt"
 	"log"
 	"net/http"
@@ -220,19 +219,19 @@ func (h *UserHandler) Info(c *gin.Context) {
 		"code": 0,
 		"msg":  "success",
 		"data": gin.H{
-			"uid":      user.UID,
-			"gid":      user.GID,
-			"username": user.Username,
-			"email":    user.Email,
-			"phone":    user.Phone,
-			"qq":       user.Qq,
+			"uid":        user.UID,
+			"gid":        user.GID,
+			"username":   user.Username,
+			"email":      user.Email,
+			"phone":      user.Phone,
+			"qq":         user.Qq,
 			"alipay_uid": user.AlipayUID,
 			"wx_uid":     user.WxUID,
 			"qq_uid":     user.QqUID,
-			"money":    user.Money,
-			"status":   user.Status,
-			"cert":     user.Cert,
-			"endtime":  user.Endtime,
+			"money":      user.Money,
+			"status":     user.Status,
+			"cert":       user.Cert,
+			"endtime":    user.Endtime,
 		},
 	})
 }
@@ -803,8 +802,12 @@ func (h *UserHandler) FindPwdReset(c *gin.Context) {
 		return
 	}
 
-	// 更新密码
-	pwdHash := fmt.Sprintf("%x", md5.Sum([]byte(req.Password+user.Key)))
+	// 更新密码（bcrypt）
+	pwdHash, err := h.authSvc.HashUserPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "密码处理失败"})
+		return
+	}
 	if err := config.DB.Model(&user).Update("pwd", pwdHash).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "密码更新失败"})
 		return

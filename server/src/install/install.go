@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"paygo/src/config"
 	"paygo/src/model"
+	"paygo/src/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -56,6 +58,13 @@ func (h *InstallHandler) DoInstall(c *gin.Context) {
 		return
 	}
 
+	// 已安装后禁止重复安装覆盖
+	var exists model.Config
+	if result := config.DB.Where("k = ?", "admin_user").First(&exists); result.Error == nil && strings.TrimSpace(exists.V) != "" {
+		c.JSON(http.StatusForbidden, gin.H{"code": 1, "msg": "系统已安装，禁止重复安装"})
+		return
+	}
+
 	// 如果提供了数据库路径，初始化数据库
 	if req.DbPath != "" {
 		if err := initDatabase(req.DbPath); err != nil {
@@ -70,7 +79,14 @@ func (h *InstallHandler) DoInstall(c *gin.Context) {
 		config.Set("admin_user", req.AdminUser)
 	}
 	if req.AdminPwd != "" {
-		config.Set("admin_pwd", req.AdminPwd)
+		authSvc := service.NewAuthService()
+		hashedPwd, err := authSvc.HashAdminPassword(req.AdminPwd)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "管理员密码处理失败"})
+			return
+		}
+		config.Set("admin_pwd", hashedPwd)
+		config.AppConfig.AdminPwd = hashedPwd
 	}
 	if req.SysKey != "" {
 		config.Set("sys_key", req.SysKey)

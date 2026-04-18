@@ -86,7 +86,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ssoLogin } from '@/api/admin'
+import { ssoLogin, ssoRecentList, ssoRecentOp } from '@/api/admin'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -111,8 +111,8 @@ async function quickLogin(uidVal: number) {
       localStorage.setItem('user_uid', res.uid)
       // 跳转到商户后台
       window.open('/user/index', '_blank')
-      // 更新最近登录
-      updateRecentList(uidVal)
+      // 刷新最近登录
+      await loadRecentList()
       ElMessage.success('登录成功')
     } else {
       ElMessage.error(res.msg || '登录失败')
@@ -122,28 +122,32 @@ async function quickLogin(uidVal: number) {
   }
 }
 
-function updateRecentList(uidVal: number) {
-  const key = `sso_recent_${localStorage.getItem('admin_token') || 'default'}`
-  const recent = JSON.parse(localStorage.getItem(key) || '[]')
-  const filtered = recent.filter((item: any) => item.uid !== uidVal)
-  filtered.unshift({ uid: uidVal, username: '商户' + uidVal })
-  localStorage.setItem(key, JSON.stringify(filtered.slice(0, 10)))
-  recentList.value = filtered.slice(0, 10)
+async function loadRecentList() {
+  try {
+    const res = await ssoRecentList()
+    if (res.code === 0) {
+      recentList.value = Array.isArray(res.data) ? res.data : []
+    }
+  } catch (error) {
+    console.error('加载最近登录失败:', error)
+  }
 }
 
-function loadRecentList() {
-  const key = `sso_recent_${localStorage.getItem('admin_token') || 'default'}`
-  const recent = JSON.parse(localStorage.getItem(key) || '[]')
-  recentList.value = recent
-}
-
-function clearRecentList() {
-  const key = `sso_recent_${localStorage.getItem('admin_token') || 'default'}`
-  localStorage.removeItem(key)
-  recentList.value = []
+async function clearRecentList() {
+  try {
+    const res = await ssoRecentOp({ action: 'clear' })
+    if (res.code === 0) {
+      recentList.value = []
+      ElMessage.success('已清空')
+    } else {
+      ElMessage.error(res.msg || '清空失败')
+    }
+  } catch (error) {
+    console.error('清空最近登录失败:', error)
+  }
 }
 
 onMounted(() => {
-  loadRecentList()
+  void loadRecentList()
 })
 </script>

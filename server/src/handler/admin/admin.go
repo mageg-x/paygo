@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"crypto/md5"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -321,25 +321,32 @@ func (h *AdminHandler) SaveSettings(c *gin.Context) {
 			return
 		}
 
-		cfg := config.AppConfig
-		if req.OldPwd != cfg.AdminPwd {
+		ok, _ := h.authSvc.VerifyAdminPassword(req.OldPwd)
+		if !ok {
 			log.Printf("[admin_change_password_failed] ip=%s, reason=old password incorrect", ip)
 			c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "原密码错误"})
 			return
 		}
 
-		err := h.authSvc.SaveConfig("admin_pwd", req.NewPwd)
+		hashedPwd, err := h.authSvc.HashAdminPassword(req.NewPwd)
+		if err != nil {
+			log.Printf("[admin_change_password_failed] ip=%s, reason=hash new password failed, error=%s", ip, err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": "保存失败"})
+			return
+		}
+
+		err = h.authSvc.SaveConfig("admin_pwd", hashedPwd)
 		if err != nil {
 			log.Printf("[admin_change_password_failed] ip=%s, error=%s", ip, err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": "保存失败"})
 			return
 		}
 
-		cfg.AdminPwd = req.NewPwd
+		config.AppConfig.AdminPwd = hashedPwd
 		log.Printf("[admin_change_password_success] ip=%s", ip)
 
 		// 生成新token并返回给前端
-		newToken := generateAdminToken(cfg.AdminUser, cfg.AdminPwd, cfg.SysKey)
+		newToken := h.authSvc.GenAdminToken()
 		// 同时设置cookie
 		c.SetCookie("admin_token", newToken, 86400*30, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功", "token": newToken})
@@ -1084,16 +1091,34 @@ func (h *AdminHandler) AjaxInviteCodeGenerate(c *gin.Context) {
 		req.Num = 1
 	}
 
-	codes := make([]string, 0)
+	codes := make([]string, 0, req.Num)
 	for i := 0; i < req.Num; i++ {
-		code := generateInviteCode()
-		invite := &model.InviteCode{
-			Code:    code,
-			Addtime: time.Now(),
-			Status:  0,
+		created := false
+		for attempt := 0; attempt < 8; attempt++ {
+			code, err := generateInviteCode()
+			if err != nil {
+				log.Printf("[invite_code_generate_failed] reason=random failed, error=%s", err.Error())
+				break
+			}
+			var exists int64
+			config.DB.Model(&model.InviteCode{}).Where("code = ?", code).Count(&exists)
+			if exists > 0 {
+				continue
+			}
+
+			invite := &model.InviteCode{
+				Code:    code,
+				Addtime: time.Now(),
+				Status:  0,
+			}
+			if err := config.DB.Create(invite).Error; err == nil {
+				codes = append(codes, code)
+				created = true
+				break
+			}
 		}
-		if err := config.DB.Create(invite).Error; err == nil {
-			codes = append(codes, code)
+		if !created {
+			log.Printf("[invite_code_generate_failed] reason=exhausted retries, index=%d", i)
 		}
 	}
 
@@ -1119,13 +1144,17 @@ func (h *AdminHandler) AjaxInviteCodeDelete(c *gin.Context) {
 }
 
 // 生成邀请码
-func generateInviteCode() string {
+func generateInviteCode() (string, error) {
 	chars := "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
 	result := make([]byte, 8)
-	for i := range result {
-		result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+	randomBytes := make([]byte, len(result))
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", err
 	}
-	return string(result)
+	for i := range result {
+		result[i] = chars[int(randomBytes[i])%len(chars)]
+	}
+	return string(result), nil
 }
 
 // 插件管理
@@ -1528,8 +1557,17 @@ func (h *AdminHandler) AddUser(c *gin.Context) {
 
 	// 如果设置了密码
 	if req.Pwd != "" {
-		pwdHash := md5Hash(req.Pwd + key)
-		config.DB.Model(user).Update("pwd", pwdHash)
+		pwdHash, err := h.authSvc.HashUserPassword(req.Pwd)
+		if err != nil {
+			log.Printf("[add_user_failed] uid=%d, reason=password hash failed, error=%s", user.UID, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "密码处理失败"})
+			return
+		}
+		if err := config.DB.Model(user).Update("pwd", pwdHash).Error; err != nil {
+			log.Printf("[add_user_failed] uid=%d, reason=save password failed, error=%s", user.UID, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "设置密码失败"})
+			return
+		}
 	}
 
 	log.Printf("[add_user_success] uid=%d, account=%s, username=%s", user.UID, req.Account, req.Username)
@@ -1613,7 +1651,12 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 
 	// 如果设置了新密码
 	if req.Pwd != "" {
-		pwdHash := md5Hash(req.Pwd + user.Key)
+		pwdHash, err := h.authSvc.HashUserPassword(req.Pwd)
+		if err != nil {
+			log.Printf("[update_user_failed] uid=%d, reason=password hash failed, error=%s", req.UID, err.Error())
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "密码处理失败"})
+			return
+		}
 		updates["pwd"] = pwdHash
 	}
 
@@ -1631,22 +1674,17 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 func generateAPIKey() string {
 	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"
 	result := make([]byte, 32)
+	randomBytes := make([]byte, len(result))
+	if _, err := rand.Read(randomBytes); err != nil {
+		now := time.Now().UnixNano()
+		for i := range result {
+			randomBytes[i] = byte((now >> (uint(i%8) * 8)) & 0xff)
+		}
+	}
 	for i := range result {
-		result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+		result[i] = chars[int(randomBytes[i])%len(chars)]
 	}
 	return string(result)
-}
-
-// 辅助函数：MD5哈希
-func md5Hash(s string) string {
-	h := md5.Sum([]byte(s))
-	return fmt.Sprintf("%x", h)
-}
-
-// 辅助函数：生成管理员token
-func generateAdminToken(username, password, sysKey string) string {
-	hash := md5.Sum([]byte(username + password + password + sysKey))
-	return fmt.Sprintf("%x", hash)
 }
 
 // AJAX: 结算操作
@@ -2068,9 +2106,10 @@ func (h *AdminHandler) AjaxSSOLogin(c *gin.Context) {
 	}
 
 	// 生成商户token
-	token := genUserToken(user.UID, user.Key)
+	token := h.authSvc.GenUserToken(user.UID, user.Key)
 
 	log.Printf("[sso_login_success] uid=%d", req.UID)
+	h.saveSSORecent(user)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":  0,
@@ -2080,10 +2119,95 @@ func (h *AdminHandler) AjaxSSOLogin(c *gin.Context) {
 	})
 }
 
-// 生成商户token
-func genUserToken(uid uint, key string) string {
-	hash := md5.Sum([]byte(fmt.Sprintf("%d_%s_%d", uid, key, time.Now().Unix())))
-	return fmt.Sprintf("%x", hash)
+// AJAX: SSO最近登录记录
+func (h *AdminHandler) AjaxSSORecent(c *gin.Context) {
+	list := h.loadSSORecent()
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "",
+		"data": list,
+	})
+}
+
+// AJAX: SSO最近登录记录操作
+func (h *AdminHandler) AjaxSSORecentOp(c *gin.Context) {
+	var req struct {
+		Action string `json:"action" binding:"required"` // clear, remove
+		UID    uint   `json:"uid"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	switch req.Action {
+	case "clear":
+		_ = config.Set("admin_sso_recent", "[]")
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "已清空"})
+		return
+	case "remove":
+		if req.UID == 0 {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "无效的商户ID"})
+			return
+		}
+		list := h.loadSSORecent()
+		filtered := make([]map[string]interface{}, 0, len(list))
+		for _, it := range list {
+			if uidFloat, ok := it["uid"].(float64); ok && uint(uidFloat) == req.UID {
+				continue
+			}
+			filtered = append(filtered, it)
+		}
+		b, _ := json.Marshal(filtered)
+		_ = config.Set("admin_sso_recent", string(b))
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "已删除"})
+		return
+	default:
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "未知操作"})
+		return
+	}
+}
+
+func (h *AdminHandler) loadSSORecent() []map[string]interface{} {
+	raw := strings.TrimSpace(config.Get("admin_sso_recent"))
+	if raw == "" {
+		return make([]map[string]interface{}, 0)
+	}
+	var list []map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &list); err != nil {
+		log.Printf("[sso_recent_parse_failed] raw=%s, error=%s", raw, err.Error())
+		return make([]map[string]interface{}, 0)
+	}
+	return list
+}
+
+func (h *AdminHandler) saveSSORecent(user model.User) {
+	list := h.loadSSORecent()
+	next := make([]map[string]interface{}, 0, 10)
+
+	item := map[string]interface{}{
+		"uid":      user.UID,
+		"username": user.Username,
+		"account":  user.Account,
+		"time":     time.Now().Format("2006-01-02 15:04:05"),
+	}
+	next = append(next, item)
+
+	for _, it := range list {
+		uidFloat, ok := it["uid"].(float64)
+		if ok && uint(uidFloat) == user.UID {
+			continue
+		}
+		next = append(next, it)
+		if len(next) >= 10 {
+			break
+		}
+	}
+
+	b, _ := json.Marshal(next)
+	if err := config.Set("admin_sso_recent", string(b)); err != nil {
+		log.Printf("[sso_recent_save_failed] uid=%d, error=%s", user.UID, err.Error())
+	}
 }
 
 // AJAX: 获取计划任务列表

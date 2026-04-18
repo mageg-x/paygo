@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"crypto/hmac"
 	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -179,6 +182,17 @@ func generateAdminToken(username, password, sysKey string) string {
 	return fmt.Sprintf("%x", hash)
 }
 
+// IsValidAdminToken 校验管理员token是否有效
+func IsValidAdminToken(token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return false
+	}
+	cfg := config.AppConfig
+	expectedToken := generateAdminToken(cfg.AdminUser, cfg.AdminPwd, cfg.SysKey)
+	return token == expectedToken
+}
+
 // 商户认证中间件
 func UserAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -193,9 +207,9 @@ func UserAuth() gin.HandlerFunc {
 			token = cookie
 		}
 
-		// token格式: {uid}_{md5hash}
-		parts := strings.Split(token, "_")
-		if len(parts) != 2 {
+		// token格式：uid.ts.hmac(hex)
+		parts := strings.Split(token, ".")
+		if len(parts) != 3 {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
 			c.Abort()
 			return
@@ -203,6 +217,19 @@ func UserAuth() gin.HandlerFunc {
 
 		uid, err := strconv.ParseUint(parts[0], 10, 32)
 		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
+			c.Abort()
+			return
+		}
+		ts, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
+			c.Abort()
+			return
+		}
+		now := time.Now().Unix()
+		// token 有效期30天
+		if ts <= 0 || now-ts > 30*24*3600 || ts-now > 300 {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
 			c.Abort()
 			return
@@ -218,6 +245,15 @@ func UserAuth() gin.HandlerFunc {
 
 		if user.Status != 1 {
 			c.JSON(http.StatusForbidden, gin.H{"code": -1, "msg": "账号已被禁用"})
+			c.Abort()
+			return
+		}
+		payload := parts[0] + "." + parts[1]
+		mac := hmac.New(sha256.New, []byte(config.AppConfig.SysKey+"|"+user.Key))
+		mac.Write([]byte(payload))
+		expected := hex.EncodeToString(mac.Sum(nil))
+		if !hmac.Equal([]byte(strings.ToLower(strings.TrimSpace(parts[2]))), []byte(expected)) {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "msg": "登录已过期"})
 			c.Abort()
 			return
 		}

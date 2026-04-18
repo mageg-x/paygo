@@ -1,9 +1,9 @@
 <template>
   <div class="min-h-screen bg-gradient-to-br from-blue-600 via-sky-500 to-indigo-600 text-white">
-    <div class="mx-auto max-w-4xl px-6 py-14 md:py-20">
+    <div class="mx-auto max-w-4xl px-6 py-7 md:py-10">
       <div class="text-center">
-        <img :src="logo" alt="彩虹易支付" class="mx-auto h-20 w-20 drop-shadow-lg" />
-        <h1 class="mt-5 text-4xl md:text-5xl font-black tracking-wide">彩虹易支付</h1>
+        <img :src="logo" alt="GoPay支付" class="mx-auto h-20 w-20 drop-shadow-lg" />
+        <!-- <h1 class="mt-5 text-4xl md:text-5xl font-black tracking-wide">GoPay支付</h1> -->
         <p class="mt-3 text-blue-50 text-base md:text-lg">安全、快捷、稳定的聚合支付平台</p>
       </div>
 

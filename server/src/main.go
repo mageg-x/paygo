@@ -97,6 +97,10 @@ func runMigrations() error {
 			name: "idx_regcode_scene_to_status_time",
 			sql:  "CREATE INDEX IF NOT EXISTS idx_regcode_scene_to_status_time ON regcode(scene, `to`, status, time)",
 		},
+		{
+			name: "idx_invitecode_code_unique",
+			sql:  "CREATE UNIQUE INDEX IF NOT EXISTS idx_invitecode_code_unique ON invitecode(code)",
+		},
 	}
 
 	for _, m := range migrations {

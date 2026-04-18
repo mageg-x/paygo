@@ -51,6 +51,12 @@ func (s *ProfitService) ProcessProfitSharing(tradeNo string) error {
 		return errors.New("订单未支付")
 	}
 
+	// 充值订单不参与分账
+	if order.Tid == 2 {
+		log.Printf("[profit_sharing_skipped] trade_no=%s, reason=recharge order", tradeNo)
+		return nil
+	}
+
 	// 获取商户的分账接收人
 	var receivers []model.PsReceiver
 	config.DB.Where("uid = ? AND status = 1", order.UID).Find(&receivers)

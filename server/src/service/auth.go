@@ -1,15 +1,16 @@
 package service
 
 import (
+	"crypto/hmac"
 	"crypto/md5"
 	crand "crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math/big"
-	"math/rand"
 	"net/mail"
 	"regexp"
 	"strconv"
@@ -19,6 +20,8 @@ import (
 	"paygo/src/config"
 	"paygo/src/middleware"
 	"paygo/src/model"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService struct{}
@@ -30,18 +33,98 @@ func NewAuthService() *AuthService {
 // 管理员登录
 func (s *AuthService) AdminLogin(username, password string) (string, error) {
 	cfg := config.AppConfig
-	if username != cfg.AdminUser || password != cfg.AdminPwd {
+	if username != cfg.AdminUser {
 		log.Printf("[admin_login_failed] username=%s, reason=invalid credentials", username)
 		return "", errors.New("用户名或密码错误")
 	}
 
-	token := s.genAdminToken(username, password)
+	ok, needUpgrade := s.VerifyAdminPassword(password)
+	if !ok {
+		log.Printf("[admin_login_failed] username=%s, reason=invalid credentials", username)
+		return "", errors.New("用户名或密码错误")
+	}
+
+	if needUpgrade {
+		hashedPwd, err := s.HashAdminPassword(password)
+		if err != nil {
+			log.Printf("[admin_password_migrate_failed] username=%s, reason=hash failed, error=%s", username, err.Error())
+			return "", errors.New("密码校验失败")
+		}
+		if err := s.SaveConfig("admin_pwd", hashedPwd); err != nil {
+			log.Printf("[admin_password_migrate_failed] username=%s, reason=save failed, error=%s", username, err.Error())
+			return "", errors.New("密码校验失败")
+		}
+		cfg.AdminPwd = hashedPwd
+		log.Printf("[admin_password_migrated] username=%s", username)
+	}
+
+	token := s.genAdminToken(username, cfg.AdminPwd)
 	return token, nil
 }
 
 func (s *AuthService) genAdminToken(username, password string) string {
 	hash := md5.Sum([]byte(username + password + password + config.AppConfig.SysKey))
 	return hex.EncodeToString(hash[:])
+}
+
+func (s *AuthService) GenAdminToken() string {
+	cfg := config.AppConfig
+	return s.genAdminToken(cfg.AdminUser, cfg.AdminPwd)
+}
+
+func isBcryptHash(v string) bool {
+	v = strings.TrimSpace(v)
+	return strings.HasPrefix(v, "$2a$") || strings.HasPrefix(v, "$2b$") || strings.HasPrefix(v, "$2y$")
+}
+
+func (s *AuthService) hashPassword(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", errors.New("密码不能为空")
+	}
+	bytes, err := bcrypt.GenerateFromPassword([]byte(raw), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+func (s *AuthService) HashUserPassword(raw string) (string, error) {
+	return s.hashPassword(raw)
+}
+
+func (s *AuthService) HashAdminPassword(raw string) (string, error) {
+	return s.hashPassword(raw)
+}
+
+func (s *AuthService) VerifyUserPassword(stored, raw, userKey string) (ok bool, needUpgrade bool) {
+	stored = strings.TrimSpace(stored)
+	if stored == "" {
+		return false, false
+	}
+	if isBcryptHash(stored) {
+		return bcrypt.CompareHashAndPassword([]byte(stored), []byte(raw)) == nil, false
+	}
+
+	legacy := md5.Sum([]byte(raw + userKey))
+	legacyHex := hex.EncodeToString(legacy[:])
+	if strings.EqualFold(stored, legacyHex) {
+		return true, true
+	}
+	return false, false
+}
+
+func (s *AuthService) VerifyAdminPassword(input string) (ok bool, needUpgrade bool) {
+	stored := strings.TrimSpace(config.AppConfig.AdminPwd)
+	if stored == "" {
+		return false, false
+	}
+	if isBcryptHash(stored) {
+		return bcrypt.CompareHashAndPassword([]byte(stored), []byte(input)) == nil, false
+	}
+	if input == stored {
+		return true, true
+	}
+	return false, false
 }
 
 // 商户登录
@@ -58,12 +141,24 @@ func (s *AuthService) UserLogin(uid uint, pwd string) (*model.User, string, erro
 		return nil, "", errors.New("账号已被禁用")
 	}
 
-	// 验证密码
-	pwdHash := md5.Sum([]byte(pwd + user.Key))
-	pwdStr := hex.EncodeToString(pwdHash[:])
-	if pwdStr != user.Pwd {
+	// 验证密码（兼容旧版MD5，登录后自动升级为bcrypt）
+	ok, needUpgrade := s.VerifyUserPassword(user.Pwd, pwd, user.Key)
+	if !ok {
 		log.Printf("[user_login_failed] uid=%d, reason=invalid password")
 		return nil, "", errors.New("密码错误")
+	}
+	if needUpgrade {
+		newPwd, err := s.HashUserPassword(pwd)
+		if err != nil {
+			log.Printf("[user_login_failed] uid=%d, reason=upgrade hash failed, error=%s", uid, err.Error())
+			return nil, "", errors.New("密码校验失败")
+		}
+		if err := config.DB.Model(&model.User{}).Where("uid = ?", user.UID).Update("pwd", newPwd).Error; err != nil {
+			log.Printf("[user_login_failed] uid=%d, reason=upgrade save failed, error=%s", uid, err.Error())
+			return nil, "", errors.New("密码校验失败")
+		}
+		user.Pwd = newPwd
+		log.Printf("[user_password_migrated] uid=%d", uid)
 	}
 
 	// 更新最后登录时间
@@ -103,8 +198,15 @@ func (s *AuthService) UserKeyLogin(uid uint, key string) (*model.User, string, e
 }
 
 func (s *AuthService) genUserToken(uid uint, key string) string {
-	hash := md5.Sum([]byte(fmt.Sprintf("%d%s%d", uid, key, time.Now().Unix())))
-	return fmt.Sprintf("%d_%s", uid, hex.EncodeToString(hash[:]))
+	ts := time.Now().Unix()
+	payload := fmt.Sprintf("%d.%d", uid, ts)
+	mac := hmac.New(sha256.New, []byte(config.AppConfig.SysKey+"|"+key))
+	mac.Write([]byte(payload))
+	return fmt.Sprintf("%s.%s", payload, hex.EncodeToString(mac.Sum(nil)))
+}
+
+func (s *AuthService) GenUserToken(uid uint, key string) string {
+	return s.genUserToken(uid, key)
 }
 
 // 商户注册
@@ -162,8 +264,11 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 	key := s.genAPIKey()
 
 	// 密码哈希
-	pwdHash := md5.Sum([]byte(password + key))
-	pwdStr := hex.EncodeToString(pwdHash[:])
+	pwdStr, err := s.HashUserPassword(password)
+	if err != nil {
+		log.Printf("[user_register_failed] email=%s, phone=%s, reason=password hash failed, error=%s", email, phone, err.Error())
+		return nil, errors.New("密码处理失败")
+	}
 
 	// 检查是否需要审核
 	userReview := s.GetConfig("user_review")
@@ -222,8 +327,15 @@ func (s *AuthService) UserRegister(email, phone, password, inviteCode string, ip
 func (s *AuthService) genAPIKey() string {
 	chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"
 	result := make([]byte, 32)
+	randomBytes := make([]byte, len(result))
+	if _, err := crand.Read(randomBytes); err != nil {
+		fallback := md5.Sum([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+		for i := range result {
+			randomBytes[i] = fallback[i%len(fallback)]
+		}
+	}
 	for i := range result {
-		result[i] = chars[rand.Intn(len(chars))]
+		result[i] = chars[int(randomBytes[i])%len(chars)]
 	}
 	return string(result)
 }

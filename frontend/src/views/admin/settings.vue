@@ -477,7 +477,7 @@
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">发件人昵称</label>
-              <input v-model="form.mail_from" type="text" placeholder="如 PayGo支付"
+              <input v-model="form.mail_from" type="text" placeholder="如 GoPay支付"
                 class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
@@ -517,7 +517,7 @@
               <label class="block text-sm font-medium text-gray-700 mb-1">短信签名</label>
               <input v-model="form.sms_sign_name" type="text"
                 class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="例如: PayGo支付" />
+                placeholder="例如: GoPay支付" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">验证码模板ID</label>
@@ -653,7 +653,7 @@ const form = reactive({
   transfer_fee: '0',
   transfer_alipay: '',
   transfer_wxpay: '',
-  transfer_show_name: 'PayGo支付',
+  transfer_show_name: 'GoPay支付',
   // 快捷登录
   login_alipay: '0',
   login_qq: '0',

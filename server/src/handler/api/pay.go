@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"paygo/src/middleware"
 	"paygo/src/model"
 	"paygo/src/plugin"
 	"paygo/src/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 // 支付API Handler
@@ -160,38 +161,34 @@ func (h *PayHandler) Submit(c *gin.Context) {
 	}
 
 	if req.PID <= 0 || req.Type <= 0 || strings.TrimSpace(req.OutTradeNo) == "" || strings.TrimSpace(req.Name) == "" || req.Money <= 0 {
-		log.Printf("[pay_submit_failed] pid=%d, out_trade_no=%s, money=%s, reason=invalid amount")
+		log.Printf("[pay_submit_failed] pid=%d, out_trade_no=%s, money=%.2f, reason=invalid params", req.PID, req.OutTradeNo, req.Money)
 		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
 		return
 	}
 
-	isAdminConsole := strings.TrimSpace(c.GetHeader("Admin-Token")) != ""
-	isCashierFlow := strings.HasPrefix(strings.TrimSpace(req.Param), "cashier_user_")
-	if !isAdminConsole && !isCashierFlow {
-		signParams := map[string]string{
-			"pid":          strconv.FormatUint(uint64(req.PID), 10),
-			"type":         strconv.Itoa(req.Type),
-			"out_trade_no": req.OutTradeNo,
-			"name":         req.Name,
-			"money":        formatSignAmount(req.Money),
-			"notify_url":   req.NotifyURL,
-			"return_url":   req.ReturnURL,
-			"device":       req.Device,
-			"param":        req.Param,
+	signParams := map[string]string{
+		"pid":          strconv.FormatUint(uint64(req.PID), 10),
+		"type":         strconv.Itoa(req.Type),
+		"out_trade_no": req.OutTradeNo,
+		"name":         req.Name,
+		"money":        formatSignAmount(req.Money),
+		"notify_url":   req.NotifyURL,
+		"return_url":   req.ReturnURL,
+		"device":       req.Device,
+		"param":        req.Param,
+	}
+	if err := h.verifyOpenAPISign(req.PID, req.SignType, req.Sign, signParams); err != nil {
+		log.Printf("[pay_submit_sign_failed] pid=%d, out_trade_no=%s, sign_type=%s, reason=%s", req.PID, req.OutTradeNo, req.SignType, err.Error())
+		msg := "签名错误"
+		if err == strconv.ErrRange {
+			msg = "sign_type不支持"
+		} else if err == strconv.ErrSyntax {
+			msg = "签名不能为空"
+		} else if strings.Contains(err.Error(), "record not found") {
+			msg = "商户不存在"
 		}
-		if err := h.verifyOpenAPISign(req.PID, req.SignType, req.Sign, signParams); err != nil {
-			log.Printf("[pay_submit_sign_failed] pid=%d, out_trade_no=%s, sign_type=%s, reason=%s", req.PID, req.OutTradeNo, req.SignType, err.Error())
-			msg := "签名错误"
-			if err == strconv.ErrRange {
-				msg = "sign_type不支持"
-			} else if err == strconv.ErrSyntax {
-				msg = "签名不能为空"
-			} else if strings.Contains(err.Error(), "record not found") {
-				msg = "商户不存在"
-			}
-			c.JSON(http.StatusOK, gin.H{"code": 1, "msg": msg})
-			return
-		}
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": msg})
+		return
 	}
 
 	ip := middleware.GetRealIP(c)
@@ -222,6 +219,62 @@ func (h *PayHandler) Submit(c *gin.Context) {
 
 	submitResult := result["result"].(plugin.SubmitResult)
 
+	c.JSON(http.StatusOK, gin.H{
+		"code":     0,
+		"trade_no": result["trade_no"],
+		"result":   submitResult,
+	})
+}
+
+// 收银台下单（公开接口，面向消费者，无需登录和签名）
+func (h *PayHandler) CashierSubmit(c *gin.Context) {
+	req := SubmitRequest{
+		PID:        uint(payIntParam(c, "pid", 0)),
+		Type:       payIntParam(c, "type", 0),
+		Channel:    payIntParam(c, "channel", 0),
+		OutTradeNo: payStringParam(c, "out_trade_no"),
+		Name:       payStringParam(c, "name"),
+		NotifyURL:  payStringParam(c, "notify_url"),
+		ReturnURL:  payStringParam(c, "return_url"),
+		Param:      payStringParam(c, "param"),
+		Device:     strings.TrimSpace(payStringParam(c, "device")),
+	}
+	if money, err := strconv.ParseFloat(payStringParam(c, "money"), 64); err == nil {
+		req.Money = money
+	}
+
+	if req.PID <= 0 || req.Type <= 0 || strings.TrimSpace(req.OutTradeNo) == "" || strings.TrimSpace(req.Name) == "" || req.Money <= 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+
+	ip := middleware.GetRealIP(c)
+	if req.Device == "" {
+		req.Device = inferDeviceByUA(c.GetHeader("User-Agent"))
+	}
+
+	params := service.SubmitParams{
+		UID:        req.PID,
+		OutTradeNo: req.OutTradeNo,
+		Type:       req.Type,
+		ChannelID:  req.Channel,
+		Name:       req.Name,
+		Money:      req.Money,
+		NotifyURL:  req.NotifyURL,
+		ReturnURL:  req.ReturnURL,
+		Param:      req.Param,
+		IP:         ip,
+		Device:     req.Device,
+	}
+
+	result, err := h.paymentSvc.SubmitPayment(params)
+	if err != nil {
+		log.Printf("[cashier_submit_failed] pid=%d, out_trade_no=%s, money=%.2f, ip=%s, reason=%s", req.PID, req.OutTradeNo, req.Money, ip, err.Error())
+		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error()})
+		return
+	}
+
+	submitResult := result["result"].(plugin.SubmitResult)
 	c.JSON(http.StatusOK, gin.H{
 		"code":     0,
 		"trade_no": result["trade_no"],

@@ -214,6 +214,15 @@ export function ssoLogin(data: { uid: number }): Promise<ApiResponse<{ token: st
   return request.post('/admin/sso', data)
 }
 
+// SSO 最近登录
+export function ssoRecentList(): Promise<ApiResponse> {
+  return request.get('/admin/sso/recent')
+}
+
+export function ssoRecentOp(data: { action: 'clear' | 'remove'; uid?: number }): Promise<ApiResponse> {
+  return request.post('/admin/sso/recent/op', data)
+}
+
 // 计划任务列表
 export function cronList(): Promise<ApiResponse> {
   return request.get('/admin/cron')

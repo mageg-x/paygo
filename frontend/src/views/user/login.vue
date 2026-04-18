@@ -4,7 +4,7 @@
       <div class="text-center mb-8">
         <img src="@/assets/paygo.png" alt="Logo" class="w-16 h-16 mx-auto mb-4" />
         <h1 class="text-3xl font-bold text-gray-800">商户登录</h1>
-        <p class="text-gray-500 mt-2">彩虹易支付</p>
+        <p class="text-gray-500 mt-2">GoPay支付</p>
       </div>
 
       <div class="mb-4">

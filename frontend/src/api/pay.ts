@@ -29,6 +29,33 @@ export function paySubmit(data: {
   })
 }
 
+// 收银台内部提交（后台同源调用，不走OpenAPI签名）
+export function payCashierSubmit(data: {
+  pid: number
+  type: number
+  channel?: number
+  out_trade_no: string
+  name: string
+  money: number
+  notify_url: string
+  return_url?: string
+  param?: string
+  method?: string
+  device?: string
+}) {
+  const form = new URLSearchParams()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      form.append(key, String(value))
+    }
+  })
+  return request.post('/pay/cashier_submit', form, {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  })
+}
+
 // JSON API创建订单
 export function payCreate(data: {
   pid: number

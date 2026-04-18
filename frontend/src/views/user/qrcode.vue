@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">固定收款码</h1>
-        <p class="text-sm text-gray-500 mt-1">生成一个可反复扫码的收款码，扫码后在收银台输入金额创建订单</p>
+        <p class="text-sm text-gray-500 mt-1">生成一个可反复扫码的收款码，支持自定义金额或固定额度直付</p>
       </div>
     </div>
 
@@ -43,6 +43,44 @@
             />
           </div>
 
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700">金额模式</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                :class="[
+                  'px-3 py-2 text-sm rounded-lg border transition-colors',
+                  fixedAmountMode ? 'border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100' : 'border-blue-500 text-blue-700 bg-blue-50'
+                ]"
+                @click="fixedAmountMode = false"
+              >
+                扫码输入金额
+              </button>
+              <button
+                type="button"
+                :class="[
+                  'px-3 py-2 text-sm rounded-lg border transition-colors',
+                  fixedAmountMode ? 'border-blue-500 text-blue-700 bg-blue-50' : 'border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100'
+                ]"
+                @click="fixedAmountMode = true"
+              >
+                固定额度直付
+              </button>
+            </div>
+          </div>
+
+          <div v-if="fixedAmountMode">
+            <label class="block text-sm font-medium text-gray-700 mb-2">固定收款金额（元）</label>
+            <input
+              v-model.number="fixedAmount"
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="例如：10.00"
+              class="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
           <button
             @click="generateQRCode"
             class="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
@@ -51,7 +89,7 @@
           </button>
 
           <div class="text-xs text-gray-500 leading-5 bg-blue-50 border border-blue-100 rounded-lg p-3">
-            该二维码是固定入口，可长期使用。每位付款人扫码后在收银台输入金额，系统才会创建新订单。
+            该二维码是固定入口，可长期使用。固定额度模式下，付款人扫码后将自动发起支付。
           </div>
         </div>
 
@@ -144,6 +182,8 @@ const uid = ref(0)
 const payTypes = ref<any[]>([])
 const defaultType = ref(0)
 const defaultRemark = ref('')
+const fixedAmountMode = ref(false)
+const fixedAmount = ref<number | null>(null)
 const qrCodeUrl = ref('')
 const payLink = ref('')
 const recentOrders = ref<any[]>([])
@@ -179,6 +219,14 @@ function buildPayLink() {
   if (defaultRemark.value) {
     url.searchParams.set('remark', defaultRemark.value)
   }
+  if (fixedAmountMode.value) {
+    const amount = Number(fixedAmount.value || 0)
+    if (amount <= 0) {
+      throw new Error('固定金额必须大于0')
+    }
+    url.searchParams.set('amount', amount.toFixed(2))
+    url.searchParams.set('autopay', '1')
+  }
   payLink.value = url.toString()
 }
 
@@ -188,7 +236,12 @@ async function generateQRCode() {
     return
   }
 
-  buildPayLink()
+  try {
+    buildPayLink()
+  } catch (e: any) {
+    ElMessage.warning(e?.message || '请检查二维码参数')
+    return
+  }
   if (!payLink.value) {
     ElMessage.error('生成链接失败')
     return

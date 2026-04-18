@@ -2,8 +2,8 @@
   <div class="min-h-screen bg-gradient-to-br from-blue-500 via-sky-500 to-indigo-600 px-4 py-8">
     <div class="mx-auto w-full max-w-md space-y-4">
       <div class="text-center text-white">
-        <img :src="logo" alt="彩虹易支付" class="w-16 h-16 mx-auto mb-3 drop-shadow-md" />
-        <h1 class="text-3xl font-bold tracking-wide">彩虹易支付</h1>
+        <img :src="logo" alt="GoPay支付" class="w-16 h-16 mx-auto mb-3 drop-shadow-md" />
+        <!-- <h1 class="text-3xl font-bold tracking-wide">GoPay支付</h1> -->
         <p class="text-blue-50 text-sm mt-1">安全、快捷、稳定的聚合支付平台</p>
       </div>
 
@@ -145,7 +145,7 @@ import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
 import logo from '@/assets/paygo.png'
-import { getPayTypes, payQuery, paySubmit } from '@/api/pay'
+import { getPayTypes, payCashierSubmit, payQuery, paySubmit } from '@/api/pay'
 import { makeOpenAPISign } from '@/utils/sign'
 
 const route = useRoute()
@@ -164,6 +164,7 @@ const form = ref({
   money: 0.01,
   remark: ''
 })
+const autoPayTriggered = ref(false)
 
 let pollTimer: number | null = null
 let pollStartAt = 0
@@ -343,11 +344,13 @@ async function submitOrder() {
       param: `cashier_user_${pid.value}`
     }
     const sign = apiKey.value ? makeOpenAPISign(submitParams, apiKey.value) : ''
-    const res = await paySubmit({
-      ...submitParams,
-      sign: sign || undefined,
-      sign_type: sign ? 'MD5' : undefined
-    })
+    const res = sign
+      ? await paySubmit({
+        ...submitParams,
+        sign: sign || undefined,
+        sign_type: sign ? 'MD5' : undefined
+      })
+      : await payCashierSubmit(submitParams)
 
     tradeNo.value = res.trade_no || ''
     await renderSubmitResult(res.result)
@@ -388,6 +391,17 @@ async function initFixedCashier() {
   const queryRemark = String(route.query.remark || '').trim()
   if (queryRemark) {
     form.value.remark = queryRemark
+  }
+
+  const queryAmount = Number(route.query.amount || 0)
+  if (queryAmount > 0) {
+    form.value.money = Number(queryAmount.toFixed(2))
+  }
+
+  const autoPay = String(route.query.autopay || '').trim() === '1'
+  if (autoPay && queryAmount > 0 && form.value.type > 0 && !autoPayTriggered.value) {
+    autoPayTriggered.value = true
+    await submitOrder()
   }
 }
 
