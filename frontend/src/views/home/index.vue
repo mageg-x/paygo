@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import logo from '@/assets/paygo.png'
+import logo from '@/assets/gopay.png'
 
 const router = useRouter()
 

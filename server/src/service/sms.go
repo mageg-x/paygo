@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 
-	"paygo/src/config"
+	"gopay/src/config"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	"github.com/alibabacloud-go/dysmsapi-20170525/v2/client"

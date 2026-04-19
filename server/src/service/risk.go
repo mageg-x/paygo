@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"paygo/src/config"
-	"paygo/src/model"
+	"gopay/src/config"
+	"gopay/src/model"
 )
 
 // 风控服务
@@ -25,7 +25,7 @@ func NewRiskService() *RiskService {
 // 风控检查结果
 type RiskCheckResult struct {
 	Passed bool
-	Code   int    // 0=通过, 1=IP黑名单, 2=用户黑名单, 3=IP每日限制, 4=用户每日限制, 5=商品名称过滤, 6=金额超限
+	Code   int // 0=通过, 1=IP黑名单, 2=用户黑名单, 3=IP每日限制, 4=用户每日限制, 5=商品名称过滤, 6=金额超限
 	Msg    string
 }
 

@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"paygo/src/config"
-	"paygo/src/middleware"
-	"paygo/src/model"
+	"gopay/src/config"
+	"gopay/src/middleware"
+	"gopay/src/model"
 
 	"golang.org/x/crypto/bcrypt"
 )

@@ -144,7 +144,7 @@ import { useRoute } from 'vue-router'
 import QRCode from 'qrcode'
 import { ElMessage } from 'element-plus'
 import SvgIcon from '@/components/svgicon.vue'
-import logo from '@/assets/paygo.png'
+import logo from '@/assets/gopay.png'
 import { getPayTypes, payCashierSubmit, payQuery, paySubmit } from '@/api/pay'
 import { makeOpenAPISign } from '@/utils/sign'
 

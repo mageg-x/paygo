@@ -9,7 +9,7 @@
           >
             <Menu class="w-5 h-5" />
           </button>
-          <img src="@/assets/paygo.png" alt="Logo" class="w-7 h-7 md:w-8 md:h-8" />
+          <img src="@/assets/gopay.png" alt="Logo" class="w-7 h-7 md:w-8 md:h-8" />
           <h1 class="text-base md:text-xl font-bold text-gray-800 no-wrap">管理后台</h1>
         </div>
         <div class="flex items-center gap-2 md:gap-4">
@@ -53,7 +53,7 @@
       <aside class="shell-sidebar absolute left-0 top-0 h-full w-[86%] max-w-[320px] shadow-xl overflow-y-auto">
         <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
           <div class="flex items-center gap-2">
-            <img src="@/assets/paygo.png" alt="Logo" class="w-7 h-7" />
+            <img src="@/assets/gopay.png" alt="Logo" class="w-7 h-7" />
             <span class="font-semibold text-slate-800 no-wrap">管理后台</span>
           </div>
           <button class="w-8 h-8 rounded-xl border border-slate-200/80 bg-white/80 text-slate-600" @click="drawerOpen = false">✕</button>

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"paygo/src/config"
-	"paygo/src/middleware"
-	"paygo/src/model"
-	"paygo/src/service"
+	"gopay/src/config"
+	"gopay/src/middleware"
+	"gopay/src/model"
+	"gopay/src/service"
 
 	"github.com/gin-gonic/gin"
 )

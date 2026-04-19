@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"paygo/src/config"
-	"paygo/src/model"
+	"gopay/src/config"
+	"gopay/src/model"
 
 	"github.com/gin-gonic/gin"
 )

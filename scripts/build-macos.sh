@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-APP_NAME="PayGo"
+APP_NAME="GoPay"
 ARCH="${1:-arm64}"
-BIN_NAME="paygo-macos-${ARCH}"
+BIN_NAME="gopay-macos-${ARCH}"
 OUTPUT="${APP_NAME}-macos-${ARCH}.zip"
 
 echo "Build macOS GUI binary: ${ARCH}"
@@ -28,13 +28,13 @@ cat > "${APP_NAME}.app/Contents/Info.plist" <<'EOF'
 <plist version="1.0">
 <dict>
   <key>CFBundleExecutable</key>
-  <string>PayGo</string>
+  <string>GoPay</string>
   <key>CFBundleIdentifier</key>
-  <string>com.paygo.app</string>
+  <string>com.gopay.app</string>
   <key>CFBundleName</key>
-  <string>PayGo</string>
+  <string>GoPay</string>
   <key>CFBundleDisplayName</key>
-  <string>PayGo</string>
+  <string>GoPay</string>
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>CFBundleShortVersionString</key>

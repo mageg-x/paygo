@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	appName = "PayGo"
-	appTip  = "PayGo 支付服务运行中"
+	appName = "GoPay"
+	appTip  = "GoPay 支付服务运行中"
 	openURL string
 	quitFn  func()
 )

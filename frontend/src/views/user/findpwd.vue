@@ -3,7 +3,7 @@
     <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
       <!-- 头部 -->
       <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 text-center">
-        <img src="@/assets/paygo.png" alt="Logo" class="w-16 h-16 mx-auto mb-3" />
+        <img src="@/assets/gopay.png" alt="Logo" class="w-16 h-16 mx-auto mb-3" />
         <h1 class="text-xl font-bold text-white">找回密码</h1>
         <p class="text-blue-100 text-sm mt-1">通过注册邮箱重置密码</p>
       </div>

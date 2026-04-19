@@ -8,19 +8,19 @@ import (
 	"runtime"
 	"strings"
 
-	"paygo/src/model"
+	"gopay/src/model"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 type Config struct {
-	DBPath    string
+	DBPath     string
 	DBProvided bool
-	Port      string
-	AdminUser string
-	AdminPwd  string
-	SysKey    string
+	Port       string
+	AdminUser  string
+	AdminPwd   string
+	SysKey     string
 }
 
 var AppConfig *Config
@@ -35,19 +35,19 @@ func LoadConfig(dbPath, port string) {
 	}
 
 	AppConfig = &Config{
-		DBPath:    resolvedDBPath,
+		DBPath:     resolvedDBPath,
 		DBProvided: strings.TrimSpace(dbPath) != "",
-		Port:      port,
-		AdminUser: "admin",
-		AdminPwd:  "12345678",
-		SysKey:    "paygosyskey2024",
+		Port:       port,
+		AdminUser:  "admin",
+		AdminPwd:   "12345678",
+		SysKey:     "paygosyskey2024",
 	}
 }
 
 // resolveAutoDBPath 在未显式传入 -db 时优先兼容历史部署路径，
 // 避免升级后切到新默认目录导致“看起来像数据丢失”。
 func resolveAutoDBPath() string {
-	if v := strings.TrimSpace(os.Getenv("PAYGO_DB_PATH")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("GOPAY_DB_PATH")); v != "" {
 		if abs, err := filepath.Abs(v); err == nil {
 			return abs
 		}
@@ -61,7 +61,7 @@ func resolveAutoDBPath() string {
 		candidates = append(candidates,
 			filepath.Join(wd, "data", "pay.db"),
 			filepath.Join(wd, "pay.db"),
-			filepath.Join(wd, "data", "paygo.db"),
+			filepath.Join(wd, "data", "gopay.db"),
 		)
 	}
 
@@ -70,7 +70,7 @@ func resolveAutoDBPath() string {
 		candidates = append(candidates,
 			filepath.Join(base, "data", "pay.db"),
 			filepath.Join(base, "pay.db"),
-			filepath.Join(base, "data", "paygo.db"),
+			filepath.Join(base, "data", "gopay.db"),
 		)
 	}
 
@@ -91,9 +91,9 @@ func resolveAutoDBPath() string {
 }
 
 // DefaultDBPath 返回各平台默认数据库路径：
-// Windows: %APPDATA%\paygo\paygo.db
-// macOS: ~/Library/Application Support/paygo/paygo.db
-// Linux: ~/.paygo/paygo.db
+// Windows: %APPDATA%\gopay\gopay.db
+// macOS: ~/Library/Application Support/gopay/gopay.db
+// Linux: ~/.gopay/gopay.db
 func DefaultDBPath() string {
 	switch runtime.GOOS {
 	case "windows":
@@ -106,19 +106,19 @@ func DefaultDBPath() string {
 		if base == "" {
 			base = "."
 		}
-		return filepath.Join(base, "paygo", "paygo.db")
+		return filepath.Join(base, "gopay", "gopay.db")
 	case "darwin":
 		home, err := os.UserHomeDir()
 		if err != nil || strings.TrimSpace(home) == "" {
-			return filepath.Join(".", "paygo.db")
+			return filepath.Join(".", "gopay.db")
 		}
-		return filepath.Join(home, "Library", "Application Support", "paygo", "paygo.db")
+		return filepath.Join(home, "Library", "Application Support", "gopay", "gopay.db")
 	default:
 		home, err := os.UserHomeDir()
 		if err != nil || strings.TrimSpace(home) == "" {
-			return filepath.Join(".", "paygo.db")
+			return filepath.Join(".", "gopay.db")
 		}
-		return filepath.Join(home, ".paygo", "paygo.db")
+		return filepath.Join(home, ".gopay", "gopay.db")
 	}
 }
 
@@ -361,12 +361,12 @@ func initDefaultConfig() {
 		{"proxy_host", ""},
 		{"proxy_port", ""},
 		{"proxy_user", ""},
-			{"proxy_pass", ""},
-			{"trusted_proxies", "127.0.0.1,::1"},
-			{"cookie_secure", "0"},
-			{"cookie_samesite", "lax"},
-			// 邮件设置
-			{"mail_smtp_host", ""},
+		{"proxy_pass", ""},
+		{"trusted_proxies", "127.0.0.1,::1"},
+		{"cookie_secure", "0"},
+		{"cookie_samesite", "lax"},
+		// 邮件设置
+		{"mail_smtp_host", ""},
 		{"mail_smtp_port", "587"},
 		{"mail_username", ""},
 		{"mail_password", ""},

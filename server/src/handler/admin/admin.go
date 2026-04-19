@@ -17,11 +17,11 @@ import (
 	"strings"
 	"time"
 
-	"paygo/src/config"
-	"paygo/src/middleware"
-	"paygo/src/model"
-	"paygo/src/plugin"
-	"paygo/src/service"
+	"gopay/src/config"
+	"gopay/src/middleware"
+	"gopay/src/model"
+	"gopay/src/plugin"
+	"gopay/src/service"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/image/webp"
@@ -250,7 +250,7 @@ func (h *AdminHandler) Settings(c *gin.Context) {
 
 	c.HTML(http.StatusOK, "admin/set.html", gin.H{
 		"mod":          mod,
-		"paygo/config": configMap,
+		"gopay/config": configMap,
 	})
 }
 

@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"crypto/hmac"
-	"crypto/subtle"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"log"
 	"net"
@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"paygo/src/config"
-	"paygo/src/model"
+	"gopay/src/config"
+	"gopay/src/model"
 
 	"github.com/gin-gonic/gin"
 )

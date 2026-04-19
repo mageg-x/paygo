@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"paygo/src/handler/admin"
-	"paygo/src/handler/api"
-	"paygo/src/handler/user"
-	"paygo/src/middleware"
-	"paygo/src/static"
+	"gopay/src/handler/admin"
+	"gopay/src/handler/api"
+	"gopay/src/handler/user"
+	"gopay/src/middleware"
+	"gopay/src/static"
 
 	"github.com/gin-gonic/gin"
 )

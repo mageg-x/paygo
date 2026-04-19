@@ -2,7 +2,7 @@ package service
 
 import (
 	"fmt"
-	"paygo/src/config"
+	"gopay/src/config"
 
 	"gopkg.in/gomail.v2"
 )

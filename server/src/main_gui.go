@@ -6,7 +6,7 @@ import (
 	"flag"
 	"log"
 
-	"paygo/src/systray"
+	"gopay/src/systray"
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 	})
 	printStartupLogs(addr, openURL, dbFile)
 
-	systray.Init("PayGo", "PayGo 支付服务运行中", openURL, nil)
+	systray.Init("GoPay", "GoPay 支付服务运行中", openURL, nil)
 
 	systray.Run(func() {
 		go func() {

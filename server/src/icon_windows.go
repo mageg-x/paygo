@@ -2,4 +2,4 @@
 
 package main
 
-import _ "paygo/src/windows"
+import _ "gopay/src/windows"

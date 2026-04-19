@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"paygo/src/config"
-	"paygo/src/router"
-	"paygo/src/service"
+	"gopay/src/config"
+	"gopay/src/router"
+	"gopay/src/service"
 
 	"github.com/gin-gonic/gin"
 )

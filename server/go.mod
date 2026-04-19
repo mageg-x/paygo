@@ -1,4 +1,4 @@
-module paygo
+module gopay
 
 go 1.24.2
 
