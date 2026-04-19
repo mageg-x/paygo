@@ -36,6 +36,14 @@ func SetupRouter() *gin.Engine {
 		path = strings.TrimPrefix(path, "/")
 		static.ServeFile(c.Writer, c.Request, fs, "assets/"+path)
 	})
+	r.GET("/snapshot/*path", func(c *gin.Context) {
+		path := c.Param("path")
+		path = strings.TrimPrefix(path, "/")
+		static.ServeFile(c.Writer, c.Request, fs, "snapshot/"+path)
+	})
+	r.GET("/i-want.html", func(c *gin.Context) {
+		static.ServeFile(c.Writer, c.Request, fs, "i-want.html")
+	})
 	r.GET("/uploads/*path", func(c *gin.Context) {
 		rawPath := strings.TrimPrefix(c.Param("path"), "/")
 		cleanRel := strings.TrimPrefix(filepath.Clean(rawPath), string(filepath.Separator))

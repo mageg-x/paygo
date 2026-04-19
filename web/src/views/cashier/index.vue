@@ -251,9 +251,7 @@ function goToPayPage() {
   }
   if (htmlPayload.value) {
     const html = normalizePayHtml(htmlPayload.value)
-    document.open()
-    document.write(html)
-    document.close()
+    document.body.innerHTML = html
     return true
   }
   return false

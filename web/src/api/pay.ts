@@ -1,6 +1,24 @@
 import request from './request'
 
-// 支付提交
+export interface PaySubmitResult {
+  trade_no?: string
+  result?: {
+    pay_url?: string
+    qr_url?: string
+    html?: string
+    app_payload?: string
+    method?: string
+  }
+}
+
+export interface PaySubmitResponse {
+  code: number
+  msg: string
+  data: any
+  trade_no?: string
+  result?: PaySubmitResult['result']
+}
+
 export function paySubmit(data: {
   pid: number
   type: number
@@ -15,7 +33,7 @@ export function paySubmit(data: {
   device?: string
   sign?: string
   sign_type?: string
-}) {
+}): Promise<PaySubmitResponse> {
   const form = new URLSearchParams()
   Object.entries(data).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
@@ -29,7 +47,6 @@ export function paySubmit(data: {
   })
 }
 
-// 收银台内部提交（后台同源调用，不走OpenAPI签名）
 export function payCashierSubmit(data: {
   pid: number
   type: number
@@ -42,7 +59,7 @@ export function payCashierSubmit(data: {
   param?: string
   method?: string
   device?: string
-}) {
+}): Promise<PaySubmitResponse> {
   const form = new URLSearchParams()
   Object.entries(data).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
